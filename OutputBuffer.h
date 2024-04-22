@@ -1,42 +1,53 @@
 ﻿#pragma once
+#include <type_traits>
 
 namespace TK
 {
-	template<int N = 0>
 	class FOutputBuffer
 	{
-		static_assert(N >= 0);
-		using FByte = char;
-		
 	public:
+		
+		FOutputBuffer() = default;
+		virtual ~FOutputBuffer() = default;
 
-		bool Push(const void* src, int len)
+		FOutputBuffer(const FOutputBuffer&) = default;
+		FOutputBuffer(FOutputBuffer&&) = default;
+
+		FOutputBuffer& operator=(const FOutputBuffer&) = default;
+		FOutputBuffer& operator=(FOutputBuffer&&) = default;
+		
+		void Push(const void* source, int length)
 		{
-			if(len <= 0)
-				return true;
-
-			int Required = Size + len;
-			if(Required < Size)
-				return false;
-
-			if(Capacity < Required)
-			{
-				const int Suggested = Size + Size / 2;
-				Capacity = Suggested > Required? Suggested : Required;
-
-				if(Heap)
-				{
-					//Heap = static_cast<FByte*>(std::realloc(Heap, Capacity));
-				}
-			}
+			if(bValid)
+				bValid = PushImpl(source, length);
 		}
 
-	private:
+		template<typename T, typename U, std::enable_if_t<std::is_integral_v<T>>* = nullptr>
+		void PushAs(U Input)
+		{
+			T Rep = static_cast<T>(Input);
+			Push(&Rep, sizeof(Rep));
+		}
 
-		int Size {0};
-		int Capacity {N};
+		bool IsValid() const { return bValid; }
 
-		FByte InlinedBuffer[N];
-		FByte* Heap {nullptr};
+	protected:
+
+		virtual bool PushImpl(const void* source, int length) = 0;
+		
+		bool bValid {true};
 	};
+
+	template<typename T, std::enable_if_t<std::is_arithmetic_v<T>>* = nullptr>
+	FOutputBuffer& operator& (FOutputBuffer& Buffer, T Data)
+	{
+		Buffer.Push(&Data, sizeof(Data));
+		return Buffer;
+	}
+
+	inline FOutputBuffer& operator& (FOutputBuffer& Buffer, bool Data)
+	{
+		uint8_t Rep = Data? 1 : 0;
+		return Buffer & Rep;
+	}
 }
