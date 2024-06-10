@@ -1,7 +1,8 @@
 ﻿#pragma once
 #include <map>
-#include "OutputBuffer.h"
 #include <vector>
+#include "OutputBuffer.h"
+#include "InputBuffer.h"
 
 namespace TK
 {
@@ -15,6 +16,13 @@ namespace TK
 		return Buffer;
 	}
 
+	template<typename T, std::enable_if_t<IsTriviallyPackable<T>>* = nullptr>
+	FInputBuffer& operator& (FInputBuffer& Buffer, T& Data)
+	{
+		Buffer.Pop(&Data, sizeof(Data));
+		return Buffer;
+	}
+
 	template<typename T, std::enable_if_t<!IsTriviallyPackable<T>>* = nullptr>
 	FOutputBuffer& operator& (FOutputBuffer& Buffer, const T& Data)
 	{
@@ -22,10 +30,28 @@ namespace TK
 		return Buffer;
 	}
 
+	template<typename T, std::enable_if_t<!IsTriviallyPackable<T>>* = nullptr>
+	FInputBuffer& operator& (FInputBuffer& Buffer, T& Data)
+	{
+		Data.Serialize(Buffer);
+		return Buffer;
+	}
+	
 	inline FOutputBuffer& operator& (FOutputBuffer& Buffer, bool Data)
 	{
 		uint8_t Rep = Data? 1 : 0;
 		return Buffer & Rep;
+	}
+
+	inline FInputBuffer& operator& (FInputBuffer& Buffer, bool& Data)
+	{
+		uint8_t Rep = 0;
+		Buffer & Rep;
+
+		if(Buffer.IsValidInput())
+			Data = Rep != 0;
+
+		return Buffer;	
 	}
 
 	template<typename T, int N>

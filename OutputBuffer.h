@@ -1,4 +1,5 @@
 ﻿#pragma once
+#include <cstdint>
 #include <type_traits>
 
 namespace TK
@@ -9,7 +10,6 @@ namespace TK
 
 		using SizeType = std::int64_t;
 		
-		FOutputBuffer() = default;
 		virtual ~FOutputBuffer() = default;
 
 		FOutputBuffer(const FOutputBuffer&) = default;
@@ -18,10 +18,10 @@ namespace TK
 		FOutputBuffer& operator=(const FOutputBuffer&) = default;
 		FOutputBuffer& operator=(FOutputBuffer&&) = default;
 		
-		void Push(const void* source, SizeType length)
+		void Push(const void* Source, SizeType Length)
 		{
-			if(bValid)
-				bValid = PushImpl(source, length);
+			if(bValidOutput)
+				bValidOutput = PushImpl(Source, Length);
 		}
 
 		template<typename T, typename U, std::enable_if_t<std::is_integral_v<T>>* = nullptr>
@@ -31,12 +31,12 @@ namespace TK
 			Push(&AsInt, sizeof(T));
 		}
 		
-		bool IsValid() const { return bValid; }
+		bool IsValidOutput() const { return bValidOutput; }
 
 	protected:
 
-		virtual bool PushImpl(const void* source, SizeType length) = 0;
+		virtual bool PushImpl(const void* Source, SizeType Length) = 0;
 		
-		bool bValid {true};
+		bool bValidOutput {true};
 	};
 }
