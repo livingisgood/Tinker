@@ -161,6 +161,7 @@
     <ClCompile Include="Tinker.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="InputBuffer.h" />
     <ClInclude Include="OutputBuffer.h" />
     <ClInclude Include="SerializeFuncs.h" />
   </ItemGroup>
