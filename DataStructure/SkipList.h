@@ -1,6 +1,5 @@
 ﻿#pragma once
 #include <cstdint>
-#include <list>
 #include <random>
 
 namespace TK
@@ -14,6 +13,19 @@ namespace TK
 			return Dist(Engine) == 0;
 		}
 	};
+
+	template<typename T>
+	struct FSkipListDefaultComparer
+	{
+		int operator()(const T& A, const T& B) const // in c++20 we could use operator <=>
+		{
+			std::less<T> Comparer {};
+			if (Comparer(A, B))
+				return -1;
+
+			return Comparer(B, A)? 1 : 0;
+		}
+	};
 	
 	template<typename T>
 	struct TSkipNode
@@ -22,46 +34,38 @@ namespace TK
 		
 		struct FLink
 		{
-			TSkipNode* Prev {nullptr};
 			TSkipNode* Next {nullptr};
-			SizeType OffsetToNext {0};
+			SizeType Span {0};
 		};
 
 		T UserData;
-		FLink* Levels; 
-		int Height;
-		
-		TSkipNode(const T& Data, int NodeHeight) : UserData(Data), Levels(new FLink[NodeHeight]), Height(NodeHeight) {}
-		~TSkipNode() { delete[] Levels; }
+		TSkipNode* Prev {nullptr};
+		FLink Links[1] {};  // zero length array is not allowed in c++
 
-		TSkipNode(const TSkipNode&) = delete;
-		TSkipNode(TSkipNode&&) = delete;
+		explicit TSkipNode(const T& Data) : UserData(Data) {}
 
-		TSkipNode& operator=(const TSkipNode&) = delete;
-		TSkipNode& operator=(TSkipNode&&) = delete;
-
-		TSkipNode* GetNext(int Level) const { return Levels[Level].Next; }
-		
-		void SetNext(int Level, TSkipNode* Node)
+		FLink* GetLink(int Level)
 		{
-			Levels[Level].Next = Node;
-			Node->Levels[Level].Prev = Node;
+			return reinterpret_cast<FLink*>(Links) + Level;
 		}
 		
-		void SetOffsetToNext(int Level, SizeType Offset) { Levels[Level].OffsetToNext = Offset; }
-		
-		TSkipNode* GetPrev(int Level) const { return Levels[Level].Prev; }
-		
-		void SetPrev(int Level, TSkipNode* Node)
+		static TSkipNode* Create(const T& Data, int Levels)
 		{
-			Levels[Level].Prev = Node;
-			Node->Levels[Level].Next = Node;
+			void* Memory = std::malloc(sizeof(TSkipNode) + (Levels - 1) * sizeof(FLink));
+			TSkipNode* Node = new (Memory)TSkipNode(Data);
+			return Node;
+		}
+
+		static void Free(TSkipNode* Node)
+		{
+			Node->~TSkipNode();
+			std::free(Node);
 		}
 	};
 	
 	template<
 		typename T,
-		typename ComparerType = std::less<T>,
+		typename ComparerType = FSkipListDefaultComparer<T>,
 		typename RandFuncT = FSkipListLevelRand,
 		int MaxLevel = 32>
 	class TSkipList
@@ -70,68 +74,118 @@ namespace TK
 
 	public:
 		
-		using Node = TSkipNode<T>;
+		using NodeType = TSkipNode<T>;
 		using NodeLink = typename TSkipNode<T>::FLink;
 		using SizeType = typename TSkipNode<T>::SizeType;
 
 		TSkipList(const ComparerType& InComparer, const RandFuncT& InRandFuc) :
-			Head(new Node(T{}, MaxLevel)), Tail(new Node(T{}, MaxLevel)), Comparer(InComparer), RandFunc(InRandFuc)
+			Comparer(InComparer), RandFunc(InRandFuc)
 		{
 			for (int i = 0; i < MaxLevel; ++i)
 			{
-				Head->SetNext(i, Tail);
+				Head->GetLink(i)->Next = nullptr;
+				Head->GetLink(i)->Span = 0;
 			}
 		}
 
 		TSkipList() : TSkipList(ComparerType(), RandFuncT()) {}
 		explicit TSkipList(const ComparerType& InComparer) : TSkipList(InComparer, RandFuncT()) {}
-
+		
 		TSkipList(const TSkipList& Other) : TSkipList(Other.Comparer, Other.RandFunc)
 		{
-			ListLevelNum = Other.ListLevelNum;
+			ListLevels = Other.ListLevels;
 			Size = Other.Size;
 
-			struct FrontNodeInfo
+			struct FrontNode
 			{
-				Node* Pos;
-				SizeType Index;
+				NodeType* Node;
+				SizeType HeadOffset;
 			};
 
-			FrontNodeInfo FrontNodes[MaxLevel];
+			FrontNode Frontier[MaxLevel];
 			for (int i = 0; i < MaxLevel; ++i)
 			{
-				FrontNodes[i].Pos = Head;
-				FrontNodes[i].Index = 0;
+				Frontier[i]->Node = Head;
+				Frontier[i]->HeadOffset = 0;
 			}
-			
-			Node* Cursor = Other.Head;
-			for (SizeType NodeIndex = 1; NodeIndex < Other.Size + 1; ++NodeIndex)
+
+			NodeType* CursorFronts[MaxLevel];
+			for (int i = 0; i < MaxLevel; ++i)
 			{
-				Cursor = Cursor->GetNext(0);
-				
-				Node* NewNode = new Node(Cursor->UserData, Cursor->Height);
-				for (int i = 0; i < Cursor->Height; ++i)
+				CursorFronts[i] = Other.Head;
+			}
+
+			NodeType* Cursor = Other.Head;
+			for (int Offset = 1; Offset < Other.Size + 1; ++Offset)
+			{
+				Cursor = Cursor->GetLink(0)->Next;
+
+				int CursorHeight = 0;
+				for (int i = 0; i < MaxLevel; ++i)
 				{
-					Node* FrontNode = FrontNodes[i].Pos;
-					FrontNode->SetNext(i, NewNode);
-					FrontNode->SetOffsetToNext(NodeIndex - FrontNodes[i].Index);
-					
-					FrontNodes[i].Pos = NewNode;
-					FrontNodes[i].Index = NodeIndex;
+					if (CursorFronts[i]->GetLink(i)->Next == Cursor)
+					{
+						CursorFronts[i] = Cursor;
+						++CursorHeight;
+					}
+					else
+					{
+						break;
+					}
+				}
+
+				NodeType* NewNode = NodeType::Create(Cursor->UserData, CursorHeight);
+				NewNode->Prev = Frontier[0]->Node;
+				
+				for (int i = 0; i < CursorHeight; ++i)
+				{
+					NodeLink* PrevLink = Frontier[i]->Node->GetLink(i);
+					PrevLink->Next = NewNode;
+					PrevLink->Span = Offset - Frontier[i]->HeadOffset;
+
+					Frontier[i]->Node = NewNode;
+					Frontier[i]->HeadOffset = Offset;
 				}
 			}
 
-			for (int i = 0; i < MaxLevel; ++i)
-			{
-				Node* FrontNode = FrontNodes[i].Pos;
-				FrontNode->SetNext(i, Tail);
-				FrontNode->SetOffsetToNext(i, Other.Size + 1 - FrontNodes[i].Index);
-			}
+			Tail = Frontier[0].Node;
 		}
 
+		TSkipList(TSkipList&& Other) noexcept: TSkipList()
+		{
+			Swap(Other);
+		}
+
+		TSkipList& operator= (const TSkipList& Other)  // NOLINT(bugprone-unhandled-self-assignment) false positive.
+		{
+			if (this == &Other)
+				return *this;
+			
+			TSkipList Tmp(Other);
+			Swap(Tmp);
+			return *this;
+		}
+
+		TSkipList& operator= (TSkipList&& Other) noexcept
+		{
+			Swap(Other);
+			return *this;
+		}
+
+		~TSkipList()
+		{
+			NodeType* Current = Head;
+			while (Current)
+			{
+				NodeType* Next = Current->GetLink(0)->Next;
+				NodeType::Free(Current);
+				Current = Next;
+			}
+		}
+		
 		void Swap(TSkipList& Other) noexcept
 		{
-			std::swap(ListLevelNum, Other.ListLevelNum);
+			std::swap(ListLevels, Other.ListLevels);
 			std::swap(Size, Other.Size);
 			std::swap(Head, Other.Head);
 			std::swap(Tail, Other.Tail);
@@ -145,19 +199,98 @@ namespace TK
 			RandFunc = TmpRands;
 		}
 
-		void Test()
+		std::pair<bool, NodeType*> Insert(const T& Data)
 		{
-			std::list<int> myList;
-			myList.push_back(3);
+			NodeType* Frontier[MaxLevel];
+			SizeType FrontierRanks[MaxLevel];
+
+			NodeType* Cur = Head;
+			SizeType CurRank = 0;
+			
+			for (int i = ListLevels - 1; i >= 0; --i)
+			{
+				while (true)
+				{
+					NodeType* Next = Cur->GetLink(i)->Next;
+
+					if (Next)
+					{
+						auto Order = Comparer(Next->UserData, Data);
+						if (Order == 0)
+							return {false, Next};
+
+						if (Order < 0)
+						{
+							Cur = Next;
+							CurRank += Cur->GetLink(i)->Span;
+							continue;
+						}
+					}
+					
+					Frontier[i] = Cur;
+					FrontierRanks[i] = CurRank;
+					break;
+				}
+			}
+
+			int Level = GetRandomLevel();
+			if (Level > ListLevels)
+			{
+				for(int i = ListLevels; i < Level; ++i)
+				{
+					Frontier[i] = Head;
+					FrontierRanks[i] = 0;
+				}
+				ListLevels = Level;
+			}
+
+			NodeType* NewNode = NodeType::Create(Data, Level);
+			
+			for (int i = 0; i < Level; ++i)
+			{
+				NodeLink* Link = Frontier[i]->GetLink(i);
+				NodeLink* NewLink = NewNode->GetLink(i);
+
+				NewLink->Next = Link->Next;
+				SizeType RankOffset = CurRank - FrontierRanks[i];
+				NewLink->Span = Link->Span - RankOffset;
+				
+				Link->Next = NewNode;
+				Link->Span = RankOffset + 1;
+			}
+
+			for (int i = Level; i < ListLevels; ++i)
+			{
+				Frontier[i]->GetLink(i)->Span += 1;	
+			}
+
+			NewNode->Prev = Cur == Head? nullptr : Cur;
+			if (NodeType* NextNode = Cur->GetLink(0)->Next)
+				NextNode->Prev = NewNode;
+			else
+				Tail = NewNode;
+
+			++Size;
+			return {true, NewNode};
 		}
 	
 	private:
 
-		int ListLevelNum {0};
+		int GetRandomLevel()
+		{
+			int Level = 1;
+			if (RandFunc() && Level < MaxLevel)
+			{
+				++Level;
+			}
+			return Level;
+		}
+
+		int ListLevels {0};
 		SizeType Size {0};
 		
-		Node* Head;
-		Node* Tail;
+		NodeType* Head {NodeType::Create(T{}, MaxLevel)};
+		NodeType* Tail {nullptr};
 		ComparerType Comparer;
 		RandFuncT RandFunc;
 	};
