@@ -2,6 +2,8 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Tinker", "Tinker.vcxproj", "{A23BFDBA-6CED-4F93-B4A6-A44FA8549C2B}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TinkerTest", "TinkerTest\TinkerTest.vcxproj", "{F5233826-88DA-4FE1-A0FF-1E8C9B19D185}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -18,5 +20,13 @@ Global
 		{A23BFDBA-6CED-4F93-B4A6-A44FA8549C2B}.Release|Win32.Build.0 = Release|Win32
 		{A23BFDBA-6CED-4F93-B4A6-A44FA8549C2B}.Release|x64.ActiveCfg = Release|x64
 		{A23BFDBA-6CED-4F93-B4A6-A44FA8549C2B}.Release|x64.Build.0 = Release|x64
+		{F5233826-88DA-4FE1-A0FF-1E8C9B19D185}.Debug|Win32.ActiveCfg = Debug|Win32
+		{F5233826-88DA-4FE1-A0FF-1E8C9B19D185}.Debug|Win32.Build.0 = Debug|Win32
+		{F5233826-88DA-4FE1-A0FF-1E8C9B19D185}.Debug|x64.ActiveCfg = Debug|x64
+		{F5233826-88DA-4FE1-A0FF-1E8C9B19D185}.Debug|x64.Build.0 = Debug|x64
+		{F5233826-88DA-4FE1-A0FF-1E8C9B19D185}.Release|Win32.ActiveCfg = Release|Win32
+		{F5233826-88DA-4FE1-A0FF-1E8C9B19D185}.Release|Win32.Build.0 = Release|Win32
+		{F5233826-88DA-4FE1-A0FF-1E8C9B19D185}.Release|x64.ActiveCfg = Release|x64
+		{F5233826-88DA-4FE1-A0FF-1E8C9B19D185}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 EndGlobal
