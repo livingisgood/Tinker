@@ -1,9 +1,10 @@
 ﻿#pragma once
+#include <iostream>
 #include <string_view>
 #include "OutStream.h"
 #include "InStream.h"
+#include "MemoryReader.h"
 #include "SerializeDefines.h"
-#include "TinkerAssert.h"
 
 namespace TK
 {
@@ -45,6 +46,21 @@ namespace TK
 		Stream.PopAs<std::uint8_t>(Data);
 	}
 
+	template<>
+	void ToStream(FOutStream& Stream, const std::string_view& Data);
+
+	template<>
+	inline void FromStream(FInStream& Stream, std::string& Data)
+	{
+		std::cout << "FIntStream called.\n";
+	}
+
+	template<>
+	inline void FromStream(FMemReader& Stream, std::string& Data)
+	{
+		std::cout << "FMemReader called.\n";
+	}
+	
 	template<typename T>
 	FOutStream& operator& (FOutStream& Stream, const T& Data)
 	{

@@ -199,6 +199,8 @@ namespace TK
 			RandFunc = TmpRands;
 		}
 
+		// first member of the return pair indicates whether insertion is succeeded.
+		// second member is the node been inserted or is already existed.
 		std::pair<bool, NodeType*> Insert(const T& Data)
 		{
 			NodeType* Frontier[MaxLevel];
@@ -273,9 +275,23 @@ namespace TK
 			++Size;
 			return {true, NewNode};
 		}
+
+		bool Erase(const T& Data)
+		{
+			NodeType* Frontiers[MaxLevel];
+
+			NodeType* Cur = Head;
+			for(int i = ListLevels - 1; i >= 0; --i)
+			{
+				while (true)
+				{
+					
+				}
+			}
+		}
 	
 	private:
-
+		
 		int GetRandomLevel()
 		{
 			int Level = 1;

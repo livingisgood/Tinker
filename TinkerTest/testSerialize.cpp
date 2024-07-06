@@ -1,5 +1,7 @@
 #include "gtest/gtest.h"
 #include <iostream>
+#include "../Serialization/MemoryReader.h"
+#include "../Serialization/SerializeFuncs.h"
 
 struct Foo
 {
@@ -32,6 +34,11 @@ TEST(SFINAE, FunctionCall)
 {
 	Foo A;
 	A = Foo();
+
+
+	TK::FMemReader Reader;
+	std::string Test;
+	TK::FromStream(Reader, Test);
 }
 
 
