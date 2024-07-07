@@ -33,6 +33,8 @@ namespace TK
 		
 		bool IsValidOutput() const { return bValidOutput; }
 
+		void MarkOutputInvalid() { bValidOutput = false; }
+
 	protected:
 
 		virtual bool PushImpl(const void* Source, SizeType Length) = 0;

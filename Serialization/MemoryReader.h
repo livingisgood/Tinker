@@ -19,11 +19,24 @@ namespace TK
 		FMemReader& operator=(const FMemReader&) = default;
 		FMemReader& operator=(FMemReader&&) = default;
 		
-		virtual SizeType GetUnreadBytes() const override { return Size - Offset; }
+		SizeType GetUnreadBytes() const { return Size - Offset; }
+		const void* GetReadPos() const { return Buffer; }
+
+		virtual bool EnsureEnoughBytes(SizeType BytesNum) const override
+		{
+			return GetUnreadBytes() >= BytesNum;
+		}
+
+		void Advance(SizeType Bytes)
+		{
+			Offset += Bytes;
+			if (Offset > Size)
+				bValidInput = false;
+		}
 
 	protected:
 		
-		virtual bool PopImpl(const void* Dest, SizeType Length) override;
+		virtual bool PopImpl(void* Dest, SizeType Length) override;
 
 		const void* Buffer {nullptr};
 		SizeType Size {0};

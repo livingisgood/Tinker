@@ -38,7 +38,7 @@ TEST(SFINAE, FunctionCall)
 
 	TK::FMemReader Reader;
 	std::string Test;
-	TK::FromStream(Reader, Test);
+	Reader & Test;
 }
 
 

@@ -18,7 +18,7 @@ namespace TK
 		FInStream& operator=(const FInStream&) = default;
 		FInStream& operator=(FInStream&&) = default;
 
-		void Pop(const void* Dest, SizeType Length)
+		void Pop(void* Dest, SizeType Length)
 		{
 			if (bValidInput)
 				bValidInput = PopImpl(Dest, Length);
@@ -49,24 +49,11 @@ namespace TK
 
 		void MarkInputInvalid() { bValidInput = false; }
 		
-		virtual SizeType GetUnreadBytes() const = 0;
-
-		bool EnsureEnoughBytes(SizeType BytesNum)
-		{
-			if (!bValidInput)
-				return false;
-
-			if (GetUnreadBytes() < BytesNum)
-			{
-				bValidInput = false;
-			}
-
-			return bValidInput;
-		}
+		virtual bool EnsureEnoughBytes(SizeType BytesNum) const = 0;
 	
 	protected:
 		
-		virtual bool PopImpl(const void* Dest, SizeType Length) = 0;
+		virtual bool PopImpl(void* Dest, SizeType Length) = 0;
 
 		bool bValidInput{true};
 	};
