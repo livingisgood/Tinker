@@ -1,6 +1,6 @@
 ﻿#pragma once
-#include <cstdint>
-#include <type_traits>
+#include <cstdint>    
+#include <type_traits> // ReSharper disable once CppUnusedIncludeDirective, false positive.
 
 namespace TK
 {
@@ -9,7 +9,8 @@ namespace TK
 	public:
 
 		using SizeType = std::int64_t;
-		
+
+		FOutStream() = default;
 		virtual ~FOutStream() = default;
 
 		FOutStream(const FOutStream&) = default;

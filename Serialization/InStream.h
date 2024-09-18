@@ -1,6 +1,6 @@
 ﻿#pragma once
 #include <cstdint>
-#include <type_traits>
+#include <type_traits>	// ReSharper disable once CppUnusedIncludeDirective, false positive
 
 namespace TK
 {
@@ -57,4 +57,6 @@ namespace TK
 
 		bool bValidInput{true};
 	};
+
+#define TK_CHECK_INPUT(Stream) if (!(Stream).IsValidInput()) return;
 }

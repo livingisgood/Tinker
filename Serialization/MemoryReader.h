@@ -1,5 +1,6 @@
 #pragma once
-#include "InStream.h"
+#include "Serialization/InStream.h"
+
 
 namespace TK
 {
@@ -8,8 +9,9 @@ namespace TK
 	public:
 		
 		FMemReader() = default;
-		FMemReader(const void* Source, SizeType Length):
-			Buffer(Source), Size(Length) {}
+
+		template<typename InSizeType>
+		FMemReader(const void* Source, InSizeType Length) : Buffer(Source), Size(static_cast<SizeType>(Length)) {}
 		
 		virtual ~FMemReader() override = default;
 		
@@ -18,9 +20,15 @@ namespace TK
 
 		FMemReader& operator=(const FMemReader&) = default;
 		FMemReader& operator=(FMemReader&&) = default;
+
+		void Init(const void* Source, SizeType Length)
+		{
+			FMemReader Tmp(Source, Length);
+			*this = Tmp;
+		}
 		
 		SizeType GetUnreadBytes() const { return Size - Offset; }
-		const void* GetReadPos() const { return Buffer; }
+		const void* GetReadPos() const { return static_cast<const char*>(Buffer) + Offset; }
 
 		virtual bool EnsureEnoughBytes(SizeType BytesNum) const override
 		{

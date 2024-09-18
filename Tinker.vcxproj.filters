@@ -21,9 +21,6 @@
     <ClCompile Include="Serialization\MemoryReader.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Serialization\SerializeFuncs.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Serialization\MemoryReader.h">
@@ -42,6 +39,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="TinkerAssert.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DataStructure\SkipList.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

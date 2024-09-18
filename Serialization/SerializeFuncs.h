@@ -1,45 +1,62 @@
 ﻿#pragma once
-#include <iostream>
 #include <string_view>
 #include <vector>
 #include <map>
-#include "OutStream.h"
-#include "InStream.h"
-#include "MemoryReader.h"
-#include "SerializeDefines.h"
+#include <array>
+#include "Serialization/OutStream.h"
+#include "Serialization/InStream.h"
+#include "Serialization/MemoryReader.h"
+#include "Serialization/SerializeDefines.h"
 #include "TinkerAssert.h"
 
 namespace TK
 {
-	template <typename OutStreamType, typename T>
+	template <typename OutStreamType, typename T,
+		std::enable_if_t<IsBitwisePackable<T> || CanBeSaved<T, OutStreamType>>* = nullptr>
 	void Save(OutStreamType& Stream, const T& Data)
 	{
-		if constexpr (IsTriviallyPackable<T>)
+		if constexpr (IsBitwisePackable<T>)
 		{
 			Stream.Push(&Data, sizeof(Data));
 		}
 		else
 		{
-			Data.Serialize(Stream);		
+			Data.Save(Stream);		
 		}
 	}
 
-	template <typename InStreamType, typename T>
+	template <typename InStreamType, typename T,
+		std::enable_if_t<IsBitwisePackable<T> || CanBeLoaded<T, InStreamType>>* = nullptr>
 	void Load(InStreamType& Stream, T& Data)
 	{
-		if constexpr (IsTriviallyPackable<T>)
+		if constexpr (IsBitwisePackable<T>)
 		{
 			Stream.Pop(&Data, sizeof(Data));	
 		}
 		else
 		{
-			Data.Serialize(Stream);		
+			Data.Load(Stream);		
 		}
 	}
 	
 	template<typename StreamType, typename T, std::enable_if_t<std::is_base_of_v<FOutStream, StreamType>>* = nullptr>
+    void Serialize(StreamType& Stream, const T& Data)
+    {
+    	using namespace TK;
+    	Save(Stream, Data);
+    }
+    
+    template<typename StreamType, typename T, std::enable_if_t<std::is_base_of_v<FInStream, StreamType>>* = nullptr>
+    void Serialize(StreamType& Stream, T& Data)
+    {
+    	using namespace TK;
+    	Load(Stream, Data);
+    }
+	
+	template<typename StreamType, typename T, std::enable_if_t<std::is_base_of_v<FOutStream, StreamType>>* = nullptr>
 	StreamType& operator& (StreamType& Stream, const T& Data)
 	{
+		using namespace TK;
 		Save(Stream, Data);
 		return Stream;
 	}
@@ -47,6 +64,7 @@ namespace TK
 	template<typename StreamType, typename T, std::enable_if_t<std::is_base_of_v<FInStream, StreamType>>* = nullptr>
 	StreamType& operator& (StreamType& Stream, T& Data)
 	{
+		using namespace TK;
 		Load(Stream, Data);
 		return Stream;
 	}
@@ -71,7 +89,7 @@ namespace TK
 	template<typename T, int N>
 	void Save(FOutStream& Stream, const T(&Data)[N])
 	{
-		if constexpr (IsTriviallyPackable<T>)
+		if constexpr (IsBitwisePackable<T>)
 		{
 			Stream.Push(Data, sizeof(T) * N);
 		}
@@ -87,7 +105,7 @@ namespace TK
 	template<typename T, int N>
 	void Load(FInStream& Stream, T(&Data)[N])
 	{
-		if constexpr (IsTriviallyPackable<T>)
+		if constexpr (IsBitwisePackable<T>)
 		{
 			Stream.Pop(Data, sizeof(T) * N);
 		}
@@ -96,6 +114,38 @@ namespace TK
 			for (int i = 0; i < N; ++i)
 			{
 				Load(Stream, Data[i]);
+			}
+		}
+	}
+
+	template<typename T, std::size_t N>
+	void Save(FOutStream& Stream, const std::array<T, N>& Data)
+	{
+		if constexpr (IsBitwisePackable<T>)
+		{
+			Stream.Push(Data.data(), sizeof(T) * N);
+		}
+		else
+		{
+			for (int i = 0; i < N; ++i)
+			{
+				Save(Stream, Data[i]);
+			}
+		}
+	}
+
+	template<typename T, std::size_t N>
+	void Load(FInStream& Stream, std::array<T, N>& Data)
+	{
+		if constexpr (IsBitwisePackable<T>)
+		{
+			Stream.Pop(Data.data(), sizeof(T) * N);
+		}
+		else
+		{
+			for (int i = 0; i < N; ++i)
+			{
+				Load(Stream, Data[i]);	
 			}
 		}
 	}
@@ -114,13 +164,13 @@ namespace TK
 		}
 
 		Stream.PushAs<std::uint32_t>(Num);
-		if constexpr (IsTriviallyPackable<T>)
+		if constexpr (IsBitwisePackable<T>)
 		{
 			Stream.Push(Data, Num * sizeof(T));
 		}
 		else
 		{
-			for (int i = 0; i < Num; ++i)
+			for (SizeType i = 0; i < Num; ++i)
 			{
 				Save(Stream, Data[i]);
 			}
@@ -130,8 +180,13 @@ namespace TK
 	template<typename CharType>
 	void Save(FOutStream& Stream, const std::basic_string_view<CharType>& Data)
 	{
-		Save<CharType, typename std::basic_string_view<CharType>::size_type>
-		(Stream, Data.data(), Data.size());
+		Save(Stream, Data.data(), Data.size());
+	}
+
+	template<typename CharType>
+	void Save(FOutStream& Stream, const std::basic_string<CharType>& Data)
+	{
+		Save(Stream, Data.data(), Data.size());
 	}
 
 	template<typename CharType>
@@ -186,7 +241,7 @@ namespace TK
 		std::uint32_t Num = Stream.Pop<std::uint32_t>();
 		Data.clear();
 
-		if constexpr (IsTriviallyPackable<T>)
+		if constexpr (IsBitwisePackable<T>)
 		{
 			if (!Stream.EnsureEnoughBytes(Num * sizeof(T)))
 			{
@@ -202,7 +257,7 @@ namespace TK
 		{
 			for (std::uint32_t i = 0; i < Num; ++i)
 			{
-				T Item;
+				T Item {};
 				Load(Stream, Item);
 
 				if (Stream.IsValidInput())
@@ -226,7 +281,7 @@ namespace TK
 		std::uint32_t Num = Stream.Pop<std::uint32_t>();
 		Data.clear();
 
-		if constexpr (IsTriviallyPackable<T>)
+		if constexpr (IsBitwisePackable<T>)
 		{
 			if (!Stream.EnsureEnoughBytes(Num * sizeof(T)))
 			{
@@ -235,8 +290,8 @@ namespace TK
 				return;
 			}
 
-			T* Start = static_cast<T*>(Stream.GetReadPos());
-			T* End = Start + Num;
+			const T* Start = static_cast<const T*>(Stream.GetReadPos());
+			const T* End = Start + Num;
 			
 			Data.insert(Data.end(), Start, End);
 			Stream.Advance(Num * sizeof(T));
@@ -245,7 +300,7 @@ namespace TK
 		{
 			for (std::uint32_t i = 0; i < Num; ++i)
 			{
-				T Item;
+				T Item {};
 				Load(Stream, Item);
 
 				if (Stream.IsValidInput())
@@ -270,6 +325,7 @@ namespace TK
 			return;
 		}
 
+		Stream.PushAs<std::uint32_t>(Data.size());
 		for (const auto& Pair : Data)
 		{
 			Save(Stream, Pair.first);
@@ -288,8 +344,8 @@ namespace TK
 		std::uint32_t Num = Stream.Pop<std::uint32_t>();
 		for (std::uint32_t i = 0; i < Num; ++i)
 		{
-			K Key;
-			V Value;
+			K Key {};
+			V Value {};
 
 			Load(Stream, Key);
 			Load(Stream, Value);
@@ -297,12 +353,26 @@ namespace TK
 			if (!Stream.IsValidInput())
 				return;
 
-			auto [_, bSucceeded] = Data.emplace(Key, Value);
+			auto [_, bSucceeded] = Data.emplace(std::move(Key), std::move(Value));
 			if (!bSucceeded)
 			{
 				Stream.MarkInputInvalid();
 				return;
 			}
 		}
+	}
+
+	template<typename StreamType, typename T1, typename T2>
+	void Save(StreamType& Stream, const std::pair<T1, T2>& Data)
+	{
+		Save(Stream, Data.first);
+		Save(Stream, Data.second);
+	}
+
+	template<typename StreamType, typename T1, typename T2>
+	void Load(StreamType& Stream, std::pair<T1, T2>& Data)
+	{
+		Load(Stream, Data.first);
+		Load(Stream, Data.second);
 	}
 }
