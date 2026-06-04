@@ -99,7 +99,7 @@ TEST(Serialize, FDummy)
 	Source.Dummy.Position[0] = 0.1f;
 	Source.Dummy.Position[1] = 2.0f;
 	Source.Dummy.Position[2] = -2;
-	Source.Dummy2.NickName = L"张";
+	Source.Dummy2.NickName = L"abc";
 
 	TK::TMemWriter Writer;
 	Writer & Source;
