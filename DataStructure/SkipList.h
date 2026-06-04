@@ -17,7 +17,7 @@ namespace TK
 	template <typename T>
 	struct TSkipListDefaultComparer
 	{
-		int operator()(const T& A, const T& B) const // in c++20 we could use operator <=>
+		int operator()(const T& A, const T& B) const // in c++20 we could use operator <=> instead
 		{
 			std::less<T> Comparer{};
 			if (Comparer(A, B))
@@ -63,6 +63,14 @@ namespace TK
 		{
 			return reinterpret_cast<FLink*>(Links) + Level;
 		}
+
+		[[nodiscard]] const FLink* GetLink(int Level) const
+		{
+			return reinterpret_cast<const FLink*>(Links) + Level;
+		}
+
+		TSkipNode* GetPrev() const { return Prev; }
+		TSkipNode* GetNext() const { return GetLink(0)->Next; }
 		
 		static TSkipNode* Create(const K& InKey, const V& InValue, int Levels)
 		{
@@ -123,9 +131,9 @@ namespace TK
 		{
 			for (int i = 0; i < MaxLevel; ++i)
 			{
-				typename TSkipNode<K, V>::FLink Link = Head->GetLink(i);
+				NodeLink* Link = Head->GetLink(i);
 				Link->Next = nullptr;
-				Link.Span = 0;
+				Link->Span = 0;
 			}
 		}
 
@@ -145,17 +153,17 @@ namespace TK
 				SizeType HeadOffset;
 			};
 
-			FrontNode Frontier[MaxLevel];
+			FrontNode InsertFronts[MaxLevel];
 			for (int i = 0; i < MaxLevel; ++i)
 			{
-				Frontier[i]->Node = Head;
-				Frontier[i]->HeadOffset = 0;
+				InsertFronts[i].Node = Head;
+				InsertFronts[i].HeadOffset = 0;
 			}
 
-			NodeType* CursorFronts[MaxLevel];
+			NodeType* CopyFronts[MaxLevel];  
 			for (int i = 0; i < MaxLevel; ++i)
 			{
-				CursorFronts[i] = Other.Head;
+				CopyFronts[i] = Other.Head;
 			}
 
 			NodeType* Cursor = Other.Head;
@@ -166,9 +174,9 @@ namespace TK
 				int CursorHeight = 0;
 				for (int i = 0; i < MaxLevel; ++i)
 				{
-					if (CursorFronts[i]->GetLink(i)->Next == Cursor)
+					if (CopyFronts[i]->GetLink(i)->Next == Cursor)
 					{
-						CursorFronts[i] = Cursor;
+						CopyFronts[i] = Cursor;
 						++CursorHeight;
 					}
 					else
@@ -177,21 +185,21 @@ namespace TK
 					}
 				}
 
-				NodeType* NewNode = NodeType::Create(Cursor->UserData, CursorHeight);
-				NewNode->Prev = Frontier[0]->Node;
+				NodeType* NewNode = NodeType::Create(Cursor->Key, Cursor->Value, CursorHeight);
+				NewNode->Prev = InsertFronts[0].Node == Head ? nullptr : InsertFronts[0].Node;
 
 				for (int i = 0; i < CursorHeight; ++i)
 				{
-					NodeLink* PrevLink = Frontier[i]->Node->GetLink(i);
+					NodeLink* PrevLink = InsertFronts[i].Node->GetLink(i);
 					PrevLink->Next = NewNode;
-					PrevLink->Span = Offset - Frontier[i]->HeadOffset;
+					PrevLink->Span = Offset - InsertFronts[i].HeadOffset;
 
-					Frontier[i]->Node = NewNode;
-					Frontier[i]->HeadOffset = Offset;
+					InsertFronts[i].Node = NewNode;
+					InsertFronts[i].HeadOffset = Offset;
 				}
 			}
 
-			Tail = Frontier[0].Node;
+			Tail = InsertFronts[0].Node;
 		}
 
 		TSkipList(TSkipList&& Other) noexcept : TSkipList()
@@ -255,6 +263,12 @@ namespace TK
 		SizeType GetSize() const { return Size; }
 
 		bool IsEmpty() const { return Size == 0; }
+
+		void Clear()
+		{
+			TSkipList EmptyList(ValueComparer, KeyComparer, RandFunc);
+			Swap(EmptyList);
+		}
 		
 		// return [whether insertion is succeeded, inserted node or existed node]
 		// caller should guarantee the key is not already existed.
@@ -280,8 +294,8 @@ namespace TK
 
 						if (Order < 0)
 						{
-							Cur = Next;
 							CurRank += Cur->GetLink(i)->Span;
+							Cur = Next;
 							continue;
 						}
 					}
@@ -299,6 +313,7 @@ namespace TK
 				{
 					Frontier[i] = Head;
 					FrontierRanks[i] = 0;
+					Head->GetLink(i)->Span = CurRank;
 				}
 				ListLevels = Level;
 			}
@@ -324,7 +339,7 @@ namespace TK
 			}
 
 			NewNode->Prev = Cur == Head ? nullptr : Cur;
-			if (NodeType* NextNode = Cur->GetLink(0)->Next)
+			if (NodeType* NextNode = NewNode->GetLink(0)->Next)
 				NextNode->Prev = NewNode;
 			else
 				Tail = NewNode;
@@ -388,7 +403,7 @@ namespace TK
 				return false;
 			
 			{
-				auto Order = ValueComparer(Range.LowerBound, Range.UpperBound);
+				auto Order = ValueComparer(Range.LowerBound.Value, Range.UpperBound.Value);
 				if (Order > 0)
 					return false;
 
@@ -396,23 +411,150 @@ namespace TK
 					return false;
 			}
 
-			if (OutOfLowerBound(Head->GetLink(0)->Next->Value, Range.LowerBound))
+			if (OutOfLowerBound(Tail->Value, Range.LowerBound))
 				return false;
 
-			if (OutOfUpperBound(Tail->Value, Range.UpperBound))
+			if (OutOfUpperBound(Head->GetLink(0)->Next->Value, Range.UpperBound))
 				return false;
 
 			return true;
 		}
 
-		  
-		
+		// Index starts from zero
+		NodeType* At(SizeType Index) const
+		{
+			if (Index >= Size || Index < 0)
+				return nullptr;
+
+			constexpr SizeType NearSearch = 10;
+
+			if (Index < NearSearch)
+			{
+				NodeType* Node = Head->GetNext();
+				for (int i = 0; i < Index; ++i)
+				{
+					Node = Node->GetNext();
+				}
+				return Node;
+			}
+
+			if (Size - Index < NearSearch)
+			{
+				NodeType* Node = Tail;
+				for (SizeType i = Size - 1; i > Index; --i)
+				{
+					Node = Node->Prev;
+				}
+				return Node;
+			}
+
+			NodeType* Cur = Head;
+			int Levels = ListLevels - 1;
+			SizeType RemainSteps = Index + 1;
+			
+			while (true)
+			{
+				NodeLink* Link = Cur->GetLink(Levels);
+				NodeType* Next = Link->Next;
+
+				if (RemainSteps == Link->Span)
+					return Next;
+
+				if (RemainSteps > Link->Span)
+				{
+					Cur = Next;
+					RemainSteps -= Link->Span;
+				}
+				else
+				{
+					--Levels;
+				}
+			}
+		}
+
+		// Index starts from zero
+		NodeType* operator[] (SizeType Index) const
+		{
+			return At(Index);
+		}
+
+		// find first node that satisfies this LowerBound, return this node and it's index (if existed)
+		std::pair<NodeType*, SizeType> GetFirstInLowerBound(const TRangeBound<V>& LowerBound) const
+		{
+			if (IsEmpty() || OutOfLowerBound(Tail->Value, LowerBound))
+				return { nullptr, SizeType(-1) };
+
+			NodeType* Cur = Head;
+			SizeType Index = 0;
+			int Levels = ListLevels - 1;
+
+			while (true)
+			{
+				NodeLink* Link = Cur->GetLink(Levels);
+				SizeType Span = Link->Span;
+				NodeType* Next = Link->Next;
+
+				if (Next == nullptr)
+				{
+					if (Levels == 0)
+						return { nullptr, SizeType(-1) };
+					--Levels;
+				}
+				else if (OutOfLowerBound(Next->Value, LowerBound))
+				{
+					Index += Span;
+					Cur = Next;
+				}
+				else
+				{
+					if (Span == 1)
+						return { Next, Index };
+
+					--Levels;
+				}
+			}
+		}
+
+		// find last node that satisfies this UpperBound, return this node and it's index (if existed)
+		std::pair<NodeType*, SizeType> GetLastInUpperBound(const TRangeBound<V>& UpperBound) const
+		{
+			if (IsEmpty() || OutOfUpperBound(Head->GetNext()->Value, UpperBound))
+				return { nullptr, SizeType(-1) };
+
+			if (!OutOfUpperBound(Tail->Value, UpperBound))
+				return { Tail, Size - 1 };
+
+			NodeType* Cur = Head;
+			SizeType Index = 0;
+			int Levels = ListLevels - 1;
+
+			while (true)
+			{
+				NodeLink* Link = Cur->GetLink(Levels);
+				SizeType Span = Link->Span;
+				NodeType* Next = Link->Next;
+				
+				if (Next != nullptr && !OutOfUpperBound(Next->Value, UpperBound))
+				{
+					Index += Span;
+					Cur = Next;
+				}
+				else
+				{
+					if (Span == 1)
+						return { Cur, Index - 1 };
+					
+					--Levels;
+				}
+			}
+		}
+	
 	private:
 		
 		int GetRandomLevel()
 		{
 			int Level = 1;
-			if (RandFunc() && Level < MaxLevel)
+			while (RandFunc() && Level < MaxLevel)
 			{
 				++Level;
 			}
@@ -471,6 +613,17 @@ namespace TK
 				}
 				else
 				{
+					// Re-traverse at this level to find the correct frontier.
+					// Cur from the higher level may skip over intermediate
+					// nodes that exist only at lower levels.
+					while (Cur->GetLink(i)->Next != Location.Node && Cur->GetLink(i)->Next != nullptr)
+					{
+						auto Order = Comparer(Cur->GetLink(i)->Next, Key, Value);
+						if (Order < 0)
+							Cur = Cur->GetLink(i)->Next;
+						else
+							break;
+					}
 					Location.Frontiers[i] = Cur;
 				}
 			}
