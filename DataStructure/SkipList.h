@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <cstdint>
 #include <random>
 
@@ -64,6 +64,11 @@ namespace TK
 			return reinterpret_cast<FLink*>(Links) + Level;
 		}
 
+		[[nodiscard]] const FLink* GetLink(int Level) const
+		{
+			return reinterpret_cast<const FLink*>(Links) + Level;
+		}
+
 		TSkipNode* GetPrev() const { return Prev; }
 		TSkipNode* GetNext() const { return GetLink(0)->Next; }
 		
@@ -126,7 +131,7 @@ namespace TK
 		{
 			for (int i = 0; i < MaxLevel; ++i)
 			{
-				typename TSkipNode<K, V>::FLink* Link = Head->GetLink(i);
+				NodeLink* Link = Head->GetLink(i);
 				Link->Next = nullptr;
 				Link->Span = 0;
 			}
@@ -181,7 +186,7 @@ namespace TK
 				}
 
 				NodeType* NewNode = NodeType::Create(Cursor->Key, Cursor->Value, CursorHeight);
-				NewNode->Prev = InsertFronts[0].Node;
+				NewNode->Prev = InsertFronts[0].Node == Head ? nullptr : InsertFronts[0].Node;
 
 				for (int i = 0; i < CursorHeight; ++i)
 				{
@@ -310,6 +315,7 @@ namespace TK
 				{
 					Frontier[i] = Head;
 					FrontierRanks[i] = 0;
+					Head->GetLink(i)->Span = CurRank;
 				}
 				ListLevels = Level;
 			}
@@ -399,7 +405,7 @@ namespace TK
 				return false;
 			
 			{
-				auto Order = ValueComparer(Range.LowerBound, Range.UpperBound);
+				auto Order = ValueComparer(Range.LowerBound.Value, Range.UpperBound.Value);
 				if (Order > 0)
 					return false;
 
@@ -407,10 +413,10 @@ namespace TK
 					return false;
 			}
 
-			if (OutOfLowerBound(Head->GetLink(0)->Next->Value, Range.LowerBound))
+			if (OutOfLowerBound(Tail->Value, Range.LowerBound))
 				return false;
 
-			if (OutOfUpperBound(Tail->Value, Range.UpperBound))
+			if (OutOfUpperBound(Head->GetLink(0)->Next->Value, Range.UpperBound))
 				return false;
 
 			return true;
@@ -436,7 +442,12 @@ namespace TK
 
 			if (Size - Index < NearSearch)
 			{
-				
+				NodeType* Node = Tail;
+				for (SizeType i = Size - 1; i > Index; --i)
+				{
+					Node = Node->Prev;
+				}
+				return Node;
 			}
 
 			NodeType* Cur = Head;
@@ -485,7 +496,13 @@ namespace TK
 				SizeType Span = Link->Span;
 				NodeType* Next = Link->Next;
 
-				if (OutOfLowerBound(Next->Value, LowerBound))
+				if (Next == nullptr)
+				{
+					if (Levels == 0)
+						return { nullptr, SizeType(-1) };
+					--Levels;
+				}
+				else if (OutOfLowerBound(Next->Value, LowerBound))
 				{
 					Index += Span;
 					Cur = Next;
@@ -519,7 +536,7 @@ namespace TK
 				SizeType Span = Link->Span;
 				NodeType* Next = Link->Next;
 				
-				if (!OutOfUpperBound(Next->Value, UpperBound))
+				if (Next != nullptr && !OutOfUpperBound(Next->Value, UpperBound))
 				{
 					Index += Span;
 					Cur = Next;
@@ -598,6 +615,17 @@ namespace TK
 				}
 				else
 				{
+					// Re-traverse at this level to find the correct frontier.
+					// Cur from the higher level may skip over intermediate
+					// nodes that exist only at lower levels.
+					while (Cur->GetLink(i)->Next != Location.Node && Cur->GetLink(i)->Next != nullptr)
+					{
+						auto Order = Comparer(Cur->GetLink(i)->Next, Key, Value);
+						if (Order < 0)
+							Cur = Cur->GetLink(i)->Next;
+						else
+							break;
+					}
 					Location.Frontiers[i] = Cur;
 				}
 			}

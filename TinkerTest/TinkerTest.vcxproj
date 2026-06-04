@@ -37,6 +37,7 @@
   <PropertyGroup Label="UserMacros" />
   <ItemGroup>
     <ClCompile Include="testSerialize.cpp" />
+    <ClCompile Include="testSkipList.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
