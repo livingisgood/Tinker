@@ -63,6 +63,11 @@ namespace TK
 		{
 			return reinterpret_cast<FLink*>(Links) + Level;
 		}
+		
+		const FLink* GetLink(int Level) const
+		{
+			return reinterpret_cast<const FLink*>(Links) + Level;
+		}
 
 		TSkipNode* GetPrev() const { return Prev; }
 		TSkipNode* GetNext() const { return GetLink(0)->Next; }
@@ -71,6 +76,14 @@ namespace TK
 		{
 			void* Memory = std::malloc(sizeof(TSkipNode) + (Levels - 1) * sizeof(FLink));
 			TSkipNode* Node = new(Memory)TSkipNode(InKey, InValue);
+			
+			for (int i = 0; i < Levels; ++i)
+			{
+				FLink* Link = Node->GetLink(i);
+				Link->Next = nullptr;
+				Link->Span = 0;
+			}
+			
 			return Node;
 		}
 
@@ -103,7 +116,7 @@ namespace TK
 		struct FLocation
 		{
 			NodeType* Node {nullptr};
-			NodeType* Frontiers[MaxLevel];
+			NodeType* Frontiers[MaxLevel] {};
 			int NodeHeight {0};
 		};
 		
@@ -124,12 +137,6 @@ namespace TK
 			const RandFuncT& InRandFunc) :
 		ValueComparer(InValueComparer), KeyComparer(InKeyComparer), RandFunc(InRandFunc)
 		{
-			for (int i = 0; i < MaxLevel; ++i)
-			{
-				typename TSkipNode<K, V>::FLink* Link = Head->GetLink(i);
-				Link->Next = nullptr;
-				Link->Span = 0;
-			}
 		}
 
 		TSkipList() : TSkipList(ValueComparerType{}, KeyComparerType{}, RandFuncT{}) {}
@@ -181,7 +188,9 @@ namespace TK
 				}
 
 				NodeType* NewNode = NodeType::Create(Cursor->Key, Cursor->Value, CursorHeight);
-				NewNode->Prev = InsertFronts[0].Node;
+				
+				if (Offset > 1)
+					NewNode->Prev = InsertFronts[0].Node;
 
 				for (int i = 0; i < CursorHeight; ++i)
 				{
@@ -304,6 +313,7 @@ namespace TK
 			}
 
 			int Level = GetRandomLevel();
+			
 			if (Level > ListLevels)
 			{
 				for (int i = ListLevels; i < Level; ++i)
@@ -315,7 +325,7 @@ namespace TK
 			}
 
 			NodeType* NewNode = NodeType::Create(Key, Value, Level);
-
+			
 			for (int i = 0; i < Level; ++i)
 			{
 				NodeLink* Link = Frontier[i]->GetLink(i);
@@ -323,7 +333,11 @@ namespace TK
 
 				NewLink->Next = Link->Next;
 				SizeType RankOffset = CurRank - FrontierRanks[i];
-				NewLink->Span = Link->Span - RankOffset;
+				
+				if (Link->Next)
+					NewLink->Span = Link->Span - RankOffset;
+				else
+					NewLink->Span = 0;
 
 				Link->Next = NewNode;
 				Link->Span = RankOffset + 1;
@@ -331,7 +345,9 @@ namespace TK
 
 			for (int i = Level; i < ListLevels; ++i)
 			{
-				Frontier[i]->GetLink(i)->Span += 1;
+				NodeLink* Link = Frontier[i]->GetLink(i);
+				if (Link->Next)
+					Link->Span += 1;
 			}
 
 			NewNode->Prev = Cur == Head ? nullptr : Cur;
@@ -399,7 +415,7 @@ namespace TK
 				return false;
 			
 			{
-				auto Order = ValueComparer(Range.LowerBound, Range.UpperBound);
+				auto Order = ValueComparer(Range.LowerBound.Value, Range.UpperBound.Value);
 				if (Order > 0)
 					return false;
 
@@ -407,13 +423,20 @@ namespace TK
 					return false;
 			}
 
-			if (OutOfLowerBound(Head->GetLink(0)->Next->Value, Range.LowerBound))
+			if (OutOfUpperBound(Head->GetLink(0)->Next->Value, Range.UpperBound))
 				return false;
 
-			if (OutOfUpperBound(Tail->Value, Range.UpperBound))
+			if (OutOfLowerBound(Tail->Value, Range.LowerBound))
 				return false;
+			
+			auto Result = GetFirstInLowerBound(Range.LowerBound);
+			
+			if (Result.first)
+			{
+				return !OutOfUpperBound(Result.first->Value, Range.UpperBound);
+			}
 
-			return true;
+			return false;
 		}
 
 		// Index starts from zero
@@ -427,7 +450,7 @@ namespace TK
 			if (Index < NearSearch)
 			{
 				NodeType* Node = Head->GetNext();
-				for (int i = 0; i < Index; ++i)
+				for (SizeType i = 0; i < Index; ++i)
 				{
 					Node = Node->GetNext();
 				}
@@ -436,7 +459,12 @@ namespace TK
 
 			if (Size - Index < NearSearch)
 			{
-				
+				NodeType* Node = Tail;
+				for (SizeType i = 0; i < Size - Index - 1; ++i)
+				{
+					Node = Node->Prev;	
+				}
+				return Node;
 			}
 
 			NodeType* Cur = Head;
@@ -451,7 +479,7 @@ namespace TK
 				if (RemainSteps == Link->Span)
 					return Next;
 
-				if (RemainSteps > Link->Span)
+				if (RemainSteps > Link->Span && Next != nullptr)
 				{
 					Cur = Next;
 					RemainSteps -= Link->Span;
@@ -485,7 +513,7 @@ namespace TK
 				SizeType Span = Link->Span;
 				NodeType* Next = Link->Next;
 
-				if (OutOfLowerBound(Next->Value, LowerBound))
+				if (Next && OutOfLowerBound(Next->Value, LowerBound))
 				{
 					Index += Span;
 					Cur = Next;
@@ -519,7 +547,7 @@ namespace TK
 				SizeType Span = Link->Span;
 				NodeType* Next = Link->Next;
 				
-				if (!OutOfUpperBound(Next->Value, UpperBound))
+				if (Next && !OutOfUpperBound(Next->Value, UpperBound))
 				{
 					Index += Span;
 					Cur = Next;
@@ -572,33 +600,26 @@ namespace TK
 			NodeType* Cur = Head;
 			for (int i = ListLevels - 1; i >= 0; --i)
 			{
-				if (Location.Node == nullptr)
+				while (true)
 				{
-					while (true)
+					NodeType* Next = Cur->GetLink(i)->Next;
+					if (Next)
 					{
-						NodeType* Next = Cur->GetLink(i)->Next;
-						if (Next)
+						auto Order = Comparer(Next, Key, Value);
+						if (Order < 0)
 						{
-							auto Order = Comparer(Next, Key, Value);
-							if (Order < 0)
-							{
-								Cur = Next;
-								continue;
-							}
-
-							if (Order == 0)
-							{
-								Location.Node = Next;
-								Location.NodeHeight = i + 1;
-							}
+							Cur = Next;
+							continue;
 						}
-						Location.Frontiers[i] = Cur;
-						break;
+
+						if (Order == 0 && Location.Node == nullptr)
+						{
+							Location.Node = Next;
+							Location.NodeHeight = i + 1;
+						}
 					}
-				}
-				else
-				{
 					Location.Frontiers[i] = Cur;
+					break;
 				}
 			}
 			return Location;
@@ -606,14 +627,17 @@ namespace TK
 
 		void Erase(const FLocation& Location)
 		{
+			if (Location.Node == nullptr)
+				return;
+			
 			for (int i = 0; i < ListLevels; ++i)
 			{
 				NodeType* Prev = Location.Frontiers[i];
-				auto PrevLink = Prev->GetLink(i);
+				NodeLink* PrevLink = Prev->GetLink(i);
 
 				if (i < Location.NodeHeight)
 				{
-					auto TargetLink = Location.Node->GetLink(i);
+					NodeLink* TargetLink = Location.Node->GetLink(i);
 					
 					NodeType* Next = TargetLink->Next;
 					PrevLink->Next = Next;
@@ -621,7 +645,8 @@ namespace TK
 				}
 				else
 				{
-					PrevLink->Span -= 1;	
+					if (PrevLink->Next)
+						PrevLink->Span -= 1;	
 				}
 			}
 
