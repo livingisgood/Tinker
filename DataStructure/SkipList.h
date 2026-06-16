@@ -1,6 +1,7 @@
 ﻿#pragma once
-#include <cstdint>
+#include <cstdlib>
 #include <random>
+#include <utility>
 
 namespace TK
 {
@@ -8,7 +9,7 @@ namespace TK
 	{
 		bool operator()() const
 		{
-			static std::mt19937 Engine(std::random_device{}());
+			thread_local std::mt19937 Engine(std::random_device{}());
 			std::uniform_int_distribution<int> Dist(0, 3);
 			return Dist(Engine) == 0;
 		}
@@ -57,7 +58,9 @@ namespace TK
 		TSkipNode* Prev{nullptr};
 		FLink Links[1]{}; // zero length array is not allowed in c++
 
-		explicit TSkipNode(const K& InKey, const V& InValue) : Key(InKey), Value(InValue) {}
+		template <typename KeyT, typename ValueT>
+		explicit TSkipNode(KeyT&& InKey, ValueT&& InValue)
+			: Key(std::forward<KeyT>(InKey)), Value(std::forward<ValueT>(InValue)) {}
 
 		FLink* GetLink(int Level)
 		{
@@ -72,10 +75,11 @@ namespace TK
 		TSkipNode* GetPrev() const { return Prev; }
 		TSkipNode* GetNext() const { return GetLink(0)->Next; }
 		
-		static TSkipNode* Create(const K& InKey, const V& InValue, int Levels)
+		template <typename KeyT, typename ValueT>
+		static TSkipNode* Create(KeyT&& InKey, ValueT&& InValue, int Levels)
 		{
 			void* Memory = std::malloc(sizeof(TSkipNode) + (Levels - 1) * sizeof(FLink));
-			TSkipNode* Node = new(Memory)TSkipNode(InKey, InValue);
+			TSkipNode* Node = new(Memory)TSkipNode(std::forward<KeyT>(InKey), std::forward<ValueT>(InValue));
 			
 			for (int i = 0; i < Levels; ++i)
 			{
@@ -118,6 +122,12 @@ namespace TK
 			NodeType* Node {nullptr};
 			NodeType* Frontiers[MaxLevel] {};
 			int NodeHeight {0};
+		};
+		
+		struct FPos
+		{
+			NodeType* Node;
+			int Index;
 		};
 		
 		int ListLevels {0};
@@ -269,6 +279,10 @@ namespace TK
 		SizeType GetSize() const { return Size; }
 
 		bool IsEmpty() const { return Size == 0; }
+		
+		const NodeType* GetFirst() const { return Head->GetNext(); }
+		
+		const NodeType* GetLast() const { return Tail; }
 
 		void Clear()
 		{
@@ -277,8 +291,11 @@ namespace TK
 		}
 		
 		// return [whether insertion is succeeded, inserted node or existed node]
-		// caller should guarantee the key is not already existed.
-		std::pair<bool, NodeType*> Insert(const K& Key, const V& Value)
+		// Forwards both key and value, so callers may move rvalues into the list
+		// (e.g. List.Insert(std::move(Key), std::move(Value))) with zero copies,
+		// while lvalues still bind and copy as before.
+		template <typename KeyT, typename ValueT>
+		std::pair<bool, const NodeType*> Insert(KeyT&& Key, ValueT&& Value)
 		{
 			NodeType* Frontier[MaxLevel];
 			SizeType FrontierRanks[MaxLevel];
@@ -324,7 +341,7 @@ namespace TK
 				ListLevels = Level;
 			}
 
-			NodeType* NewNode = NodeType::Create(Key, Value, Level);
+			NodeType* NewNode = NodeType::Create(std::forward<KeyT>(Key), std::forward<ValueT>(Value), Level);
 			
 			for (int i = 0; i < Level; ++i)
 			{
@@ -365,20 +382,137 @@ namespace TK
 			if (Size == 0)
 				return false;
 
-			FLocation Location = Find(Key, Value);
+			FLocation Location = FindLocation(Key, Value);
 			if (Location.Node == nullptr)
 				return false;
 
 			Erase(Location);
 			return true;
 		}
+		
+		SizeType Erase(const TRange<V>& Range)
+		{
+			if (IsEmpty())
+				return 0;
+			
+			int Order = ValueComparer(Range.LowerBound.Value, Range.UpperBound.Value);
+			if (Order > 0)
+				return 0;
+			
+			if (Order == 0 && (Range.LowerBound.bExclusive || Range.UpperBound.bExclusive))
+				return 0;
+			
+			if (OutOfUpperBound(Head->GetLink(0)->Next->Value, Range.UpperBound))
+				return 0;
 
-		NodeType* Update(const K& Key, const V& CurrentValue, const V& NewValue)
+			if (OutOfLowerBound(Tail->Value, Range.LowerBound))
+				return 0;
+
+			FPos EraseBegin[MaxLevel] {};
+			FPos EraseUntil[MaxLevel] {};
+			
+			NodeType* CurFrom = Head;
+			NodeType* CurTo = nullptr;
+			
+			SizeType FromIndex = -1;
+			SizeType ToIndex = -1;
+			
+			for (int i = ListLevels - 1; i >= 0; --i)
+			{
+				while (true)
+				{
+					NodeLink* Link = CurFrom->GetLink(i);
+					NodeType* Next = Link->Next;
+					if (Next && OutOfLowerBound(Next->Value, Range.LowerBound))
+					{
+						CurFrom = Next;
+						FromIndex += Link->Span;
+					}
+					else
+					{
+						break;
+					}
+				}
+				EraseBegin[i].Node = CurFrom;
+				EraseBegin[i].Index = FromIndex;
+				
+				CurTo = CurFrom;
+				ToIndex = FromIndex;
+				
+				while (true)
+				{
+					NodeLink* Link = CurTo->GetLink(i);
+					NodeType* Next = Link->Next;
+					if (Next && !OutOfUpperBound(Next->Value, Range.UpperBound))
+					{
+						CurTo = Next;
+						ToIndex += Link->Span;
+					}
+					else
+					{
+						EraseUntil[i].Node = Next;
+						EraseUntil[i].Index = Next? ToIndex + Link->Span : Size;	
+						
+						break;
+					}
+				}
+			}
+			
+			NodeType* ToErase = EraseBegin[0].Node->GetNext();
+			NodeType* EraseStop = EraseUntil[0].Node;
+			while (ToErase != EraseStop)
+			{
+				NodeType* Node = ToErase;
+				ToErase = ToErase->GetNext();
+				
+				NodeType::Free(Node);
+			}
+			
+			int Removed = ToIndex - FromIndex;
+			
+			for (int i = 0; i < ListLevels; ++i)
+			{
+				NodeLink* Link = EraseBegin[i].Node->GetLink(i);
+				if (Link->Next)
+				{
+					Link->Next = EraseUntil[i].Node;
+					
+					if (Link->Next)
+						Link->Span = EraseUntil[i].Index - EraseBegin[i].Index - Removed;
+				}
+			}
+			
+			if (EraseUntil[0].Node)
+				EraseUntil[0].Node->Prev = EraseBegin[0].Node == Head? nullptr : EraseBegin[0].Node;
+			
+			if (EraseUntil[0].Node == nullptr)
+				Tail = EraseBegin[0].Node;
+			
+			int Height = ListLevels;
+			for (int i = ListLevels - 1; i >= 0; --i)
+			{
+				if (EraseBegin[i].Node == Head && EraseUntil[i].Node == nullptr)
+				{
+					--Height;
+				}
+				else
+				{
+					break;
+				}
+			}
+			ListLevels = Height;
+			Size -= Removed;
+			
+			return Removed;
+		}
+
+		template <typename ValueT>
+		const NodeType* Update(const K& Key, const V& CurrentValue, ValueT&& NewValue)
 		{
 			if (Size == 0)
 				return nullptr;
 			
-			FLocation Location = Find(Key, CurrentValue);
+			FLocation Location = FindLocation(Key, CurrentValue);
 			if (Location.Node == nullptr)
 				return nullptr;
 
@@ -406,7 +540,7 @@ namespace TK
 			}
 
 			Erase(Location);
-			return Insert(Key, NewValue).second;	
+			return Insert(Key, std::forward<ValueT>(NewValue)).second;	
 		}
 
 		bool ContainsAnyInRange(const TRange<V>& Range) const
@@ -438,9 +572,22 @@ namespace TK
 
 			return false;
 		}
+		
+		SizeType GetCountInRange(const TRange<V>& Range) const
+		{
+			auto FirstInRange = GetFirstInLowerBound(Range.LowerBound);
+			if (FirstInRange.first == nullptr)
+				return 0;
+			
+			auto LastInRange = GetLastInUpperBound(Range.UpperBound);
+			if (LastInRange.first == nullptr)
+				return 0;
+			
+			return LastInRange.second - FirstInRange.second + 1;
+		}
 
 		// Index starts from zero
-		NodeType* At(SizeType Index) const
+		const NodeType* At(SizeType Index) const
 		{
 			if (Index >= Size || Index < 0)
 				return nullptr;
@@ -492,13 +639,39 @@ namespace TK
 		}
 
 		// Index starts from zero
-		NodeType* operator[] (SizeType Index) const
+		const NodeType* operator[] (SizeType Index) const
 		{
 			return At(Index);
 		}
+		
+		const NodeType* Find(const K& Key, const V& Value) const
+		{
+			NodeType* Cur = Head;
+			for (int i = ListLevels - 1; i >= 0; --i)
+			{
+				while (true)
+				{
+					NodeType* Next = Cur->GetLink(i)->Next;
+					if (Next)
+					{
+						auto Order = Comparer(Next, Key, Value);
+						if (Order < 0)
+						{
+							Cur = Next;
+							continue;
+						}
+						
+						if (Order == 0)
+							return Next;
+					}
+					break;
+				}
+			}
+			return nullptr;
+		}
 
 		// find first node that satisfies this LowerBound, return this node and it's index (if existed)
-		std::pair<NodeType*, SizeType> GetFirstInLowerBound(const TRangeBound<V>& LowerBound) const
+		std::pair<const NodeType*, SizeType> GetFirstInLowerBound(const TRangeBound<V>& LowerBound) const
 		{
 			if (IsEmpty() || OutOfLowerBound(Tail->Value, LowerBound))
 				return { nullptr, SizeType(-1) };
@@ -529,7 +702,7 @@ namespace TK
 		}
 
 		// find last node that satisfies this UpperBound, return this node and it's index (if existed)
-		std::pair<NodeType*, SizeType> GetLastInUpperBound(const TRangeBound<V>& UpperBound) const
+		std::pair<const NodeType*, SizeType> GetLastInUpperBound(const TRangeBound<V>& UpperBound) const
 		{
 			if (IsEmpty() || OutOfUpperBound(Head->GetNext()->Value, UpperBound))
 				return { nullptr, SizeType(-1) };
@@ -562,6 +735,44 @@ namespace TK
 			}
 		}
 	
+		// return the rank by element's key and value. rank is 0-based.
+		// if such element is not existed, -1 is returned.
+		SizeType GetRank(const K& Key, const V& Value) const
+		{
+			if (IsEmpty())
+				return -1;
+
+			SizeType Rank = -1;
+			NodeType* Cur = Head;
+
+			for (int i = ListLevels - 1; i >= 0; --i)
+			{
+				while (true)
+				{
+					NodeType* Next = Cur->GetLink(i)->Next;
+					if (Next)
+					{
+						int Order = Comparer(Next, Key, Value);
+						if (Order < 0)
+						{
+							Rank += Cur->GetLink(i)->Span;
+							Cur = Next;
+							continue;
+						}
+
+						if (Order == 0)
+						{
+							Rank += Cur->GetLink(i)->Span;
+							return Rank;
+						}
+					}
+					break;
+				}
+			}
+			return -1;
+		}
+	
+		
 	private:
 		
 		int GetRandomLevel()
@@ -574,7 +785,7 @@ namespace TK
 			return Level;
 		}
 		
-		int Comparer(const NodeType* Node, const K& Key, const V& Value)
+		int Comparer(const NodeType* Node, const K& Key, const V& Value) const
 		{
 			auto ValueOrder = ValueComparer(Node->Value, Value);
 			if (ValueOrder < 0)
@@ -592,7 +803,7 @@ namespace TK
 			return 0;
 		}
 
-		FLocation Find(const K& Key, const V& Value)
+		FLocation FindLocation(const K& Key, const V& Value) const
 		{
 			FLocation Location;
 			Location.Node = nullptr;

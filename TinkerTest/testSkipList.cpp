@@ -1364,3 +1364,1090 @@ TEST(SkipList, UpperBound_LastElement)
 	EXPECT_EQ(Node->Value, 30);
 	EXPECT_EQ(Index, 2); // last index
 }
+
+// ============================================================================
+// 13. GetRank
+// ============================================================================
+
+TEST(SkipList, GetRank_FirstElement)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+
+	EXPECT_EQ(List.GetRank(1, 10), 0);
+}
+
+TEST(SkipList, GetRank_MiddleElement)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+	{
+		List.Insert(i, i * 10);
+	}
+	// Values: 0, 10, 20, ..., 90
+	EXPECT_EQ(List.GetRank(5, 50), 5);
+}
+
+TEST(SkipList, GetRank_LastElement)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+
+	EXPECT_EQ(List.GetRank(3, 30), 2);
+}
+
+TEST(SkipList, GetRank_AfterInsert)
+{
+	IntSkipList List;
+	List.Insert(1, 10);  // rank 0
+	List.Insert(3, 30);  // rank 1
+	List.Insert(2, 20);  // inserts between → rank 1, pushes 30 to rank 2
+
+	EXPECT_EQ(List.GetRank(1, 10), 0);
+	EXPECT_EQ(List.GetRank(2, 20), 1);
+	EXPECT_EQ(List.GetRank(3, 30), 2);
+}
+
+TEST(SkipList, GetRank_AfterErase)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+	List.Insert(4, 40);
+
+	List.Erase(2, 20); // remove middle element
+
+	EXPECT_EQ(List.GetRank(1, 10), 0);
+	EXPECT_EQ(List.GetRank(3, 30), 1);
+	EXPECT_EQ(List.GetRank(4, 40), 2);
+}
+
+TEST(SkipList, GetRank_NotExist_WrongKey)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+
+	EXPECT_EQ(List.GetRank(3, 30), -1); // key 3 not in list
+}
+
+TEST(SkipList, GetRank_NotExist_WrongValue)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+
+	EXPECT_EQ(List.GetRank(1, 99), -1); // key 1 has value 10, not 99
+}
+
+TEST(SkipList, GetRank_EmptyList)
+{
+	IntSkipList List;
+	EXPECT_EQ(List.GetRank(1, 10), -1);
+}
+
+TEST(SkipList, GetRank_WithValueBasedOrdering)
+{
+	// Ordering is by value first, key second
+	IntSkipList List;
+	List.Insert(3, 300); // value 300, key 3
+	List.Insert(1, 100); // value 100, key 1
+	List.Insert(2, 200); // value 200, key 2
+
+	// Sorted order: (1,100), (2,200), (3,300)
+	EXPECT_EQ(List.GetRank(1, 100), 0);
+	EXPECT_EQ(List.GetRank(2, 200), 1);
+	EXPECT_EQ(List.GetRank(3, 300), 2);
+}
+
+TEST(SkipList, GetRank_SameValue_DifferentKey)
+{
+	// Same value, different keys → tiebreaker by key
+	IntSkipList List;
+	List.Insert(3, 100);
+	List.Insert(1, 100);
+	List.Insert(2, 100);
+
+	// Sorted: (1,100), (2,100), (3,100)
+	EXPECT_EQ(List.GetRank(1, 100), 0);
+	EXPECT_EQ(List.GetRank(2, 100), 1);
+	EXPECT_EQ(List.GetRank(3, 100), 2);
+}
+
+TEST(SkipList, GetRank_ConsistencyWithAt)
+{
+	IntSkipList List;
+	std::mt19937 Rng(12345);
+	std::uniform_int_distribution<int> Dist(0, 1000);
+
+	for (int i = 0; i < 100; ++i)
+	{
+		int Val = Dist(Rng);
+		List.Insert(Val, Val); // duplicate-safe: if already exists, Insert returns false
+	}
+
+	// Verify GetRank returns the same index as At
+	for (int i = 0; i < List.GetSize(); ++i)
+	{
+		auto* Node = List.At(i);
+		ASSERT_NE(Node, nullptr) << "i=" << i;
+		EXPECT_EQ(List.GetRank(Node->Key, Node->Value), i) << "i=" << i;
+	}
+}
+
+TEST(SkipList, GetRank_AfterClear)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Clear();
+
+	EXPECT_EQ(List.GetRank(1, 10), -1);
+}
+
+TEST(SkipListFlat, GetRank_AllLevelOne)
+{
+	FlatSkipList List;
+	for (int i = 0; i < 50; ++i)
+	{
+		List.Insert(i, i * 10);
+	}
+
+	// All nodes at level 1 (linked list); verify all ranks
+	for (int i = 0; i < 50; ++i)
+	{
+		EXPECT_EQ(List.GetRank(i, i * 10), i);
+	}
+}
+
+TEST(SkipListTall, GetRank_MultiLevel)
+{
+	TallSkipList List;
+	for (int i = 0; i < 30; ++i)
+	{
+		List.Insert(i, i * 10);
+	}
+
+	// All nodes at MaxLevel=4; verify ranks with skip-list structure
+	for (int i = 0; i < 30; ++i)
+	{
+		EXPECT_EQ(List.GetRank(i, i * 10), i);
+	}
+}
+
+TEST(SkipListMock, GetRank_ControlledLevels)
+{
+	// Levels: 1, 3, 1, 2, 1
+	FMockRandFunc Mock({false, true, true, false, false, true, false, false});
+
+	TK::TSkipList<int, int, TK::TSkipListDefaultComparer<int>, std::less<int>, FMockRandFunc, 4> List(
+		TK::TSkipListDefaultComparer<int>{}, std::less<int>{}, Mock);
+
+	List.Insert(1, 10); // level 1, rank 0
+	List.Insert(2, 20); // level 3, rank 1
+	List.Insert(3, 30); // level 1, rank 2
+	List.Insert(4, 40); // level 2, rank 3
+	List.Insert(5, 50); // level 1, rank 4
+
+	for (int i = 0; i < 5; ++i)
+	{
+		EXPECT_EQ(List.GetRank(i + 1, (i + 1) * 10), i);
+	}
+}
+
+// ============================================================================
+// 14. Find
+// ============================================================================
+
+TEST(SkipList, Find_FirstElement)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+
+	auto* Node = List.Find(1, 10);
+	ASSERT_NE(Node, nullptr);
+	EXPECT_EQ(Node->Key, 1);
+	EXPECT_EQ(Node->Value, 10);
+}
+
+TEST(SkipList, Find_MiddleElement)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+	{
+		List.Insert(i, i * 10);
+	}
+
+	auto* Node = List.Find(5, 50);
+	ASSERT_NE(Node, nullptr);
+	EXPECT_EQ(Node->Key, 5);
+	EXPECT_EQ(Node->Value, 50);
+}
+
+TEST(SkipList, Find_LastElement)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+
+	auto* Node = List.Find(3, 30);
+	ASSERT_NE(Node, nullptr);
+	EXPECT_EQ(Node->Key, 3);
+	EXPECT_EQ(Node->Value, 30);
+}
+
+TEST(SkipList, Find_NotExist_WrongKey)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+
+	EXPECT_EQ(List.Find(3, 30), nullptr);
+}
+
+TEST(SkipList, Find_NotExist_WrongValue)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+
+	EXPECT_EQ(List.Find(1, 99), nullptr);
+}
+
+TEST(SkipList, Find_EmptyList)
+{
+	IntSkipList List;
+	EXPECT_EQ(List.Find(1, 10), nullptr);
+}
+
+TEST(SkipList, Find_AfterClear)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Clear();
+
+	EXPECT_EQ(List.Find(1, 10), nullptr);
+}
+
+TEST(SkipList, Find_AfterErase)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+
+	List.Erase(2, 20);
+
+	EXPECT_EQ(List.Find(2, 20), nullptr);
+	EXPECT_NE(List.Find(1, 10), nullptr);
+	EXPECT_NE(List.Find(3, 30), nullptr);
+}
+
+TEST(SkipList, Find_ConsistencyWithAt)
+{
+	IntSkipList List;
+	std::mt19937 Rng(54321);
+	std::uniform_int_distribution<int> Dist(0, 500);
+
+	for (int i = 0; i < 80; ++i)
+	{
+		int Val = Dist(Rng);
+		List.Insert(Val, Val);
+	}
+
+	// Find should return the same pointer as At(GetRank)
+	for (int i = 0; i < List.GetSize(); ++i)
+	{
+		auto* NodeByAt = List.At(i);
+		ASSERT_NE(NodeByAt, nullptr) << "i=" << i;
+		auto* NodeByFind = List.Find(NodeByAt->Key, NodeByAt->Value);
+		EXPECT_EQ(NodeByFind, NodeByAt) << "i=" << i;
+	}
+}
+
+TEST(SkipList, Find_WithValueBasedOrdering)
+{
+	IntSkipList List;
+	List.Insert(3, 300); // value 300, key 3
+	List.Insert(1, 100); // value 100, key 1
+	List.Insert(2, 200); // value 200, key 2
+
+	auto* Node = List.Find(1, 100);
+	ASSERT_NE(Node, nullptr);
+	EXPECT_EQ(Node->Value, 100);
+	EXPECT_EQ(Node->GetPrev(), nullptr); // first in sorted order
+
+	Node = List.Find(3, 300);
+	ASSERT_NE(Node, nullptr);
+	EXPECT_EQ(Node->Value, 300);
+	EXPECT_EQ(Node->GetNext(), nullptr); // last in sorted order
+}
+
+TEST(SkipList, Find_SameValue_DifferentKey)
+{
+	IntSkipList List;
+	List.Insert(3, 100);
+	List.Insert(1, 100);
+	List.Insert(2, 100);
+
+	// All have value 100; distinguish by key
+	auto* Node1 = List.Find(1, 100);
+	auto* Node2 = List.Find(2, 100);
+	auto* Node3 = List.Find(3, 100);
+
+	ASSERT_NE(Node1, nullptr);
+	ASSERT_NE(Node2, nullptr);
+	ASSERT_NE(Node3, nullptr);
+	EXPECT_NE(Node1, Node2);
+	EXPECT_NE(Node2, Node3);
+}
+
+TEST(SkipList, Find_NextPrevAfterFind)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+	List.Insert(4, 40);
+	List.Insert(5, 50);
+
+	// Find middle and traverse neighbors
+	auto* Node = List.Find(3, 30);
+	ASSERT_NE(Node, nullptr);
+
+	auto* Prev = Node->GetPrev();
+	auto* Next = Node->GetNext();
+	ASSERT_NE(Prev, nullptr);
+	ASSERT_NE(Next, nullptr);
+	EXPECT_EQ(Prev->Value, 20);
+	EXPECT_EQ(Next->Value, 40);
+}
+
+TEST(SkipList, Find_DuplicateInsert_ReturnsExistingNode)
+{
+	IntSkipList List;
+	auto [Ok1, InsertedNode] = List.Insert(1, 100);
+	EXPECT_TRUE(Ok1);
+
+	auto* FoundNode = List.Find(1, 100);
+	EXPECT_EQ(FoundNode, InsertedNode);
+}
+
+TEST(SkipListFlat, Find_AllLevelOne)
+{
+	FlatSkipList List;
+	for (int i = 0; i < 50; ++i)
+	{
+		List.Insert(i, i * 10);
+	}
+
+	for (int i = 0; i < 50; ++i)
+	{
+		auto* Node = List.Find(i, i * 10);
+		ASSERT_NE(Node, nullptr) << "i=" << i;
+		EXPECT_EQ(Node->Value, i * 10) << "i=" << i;
+	}
+
+	EXPECT_EQ(List.Find(0, 99), nullptr);
+	EXPECT_EQ(List.Find(99, 990), nullptr);
+}
+
+TEST(SkipListTall, Find_MultiLevel)
+{
+	TallSkipList List;
+	for (int i = 0; i < 30; ++i)
+	{
+		List.Insert(i, i * 10);
+	}
+
+	for (int i = 0; i < 30; ++i)
+	{
+		auto* Node = List.Find(i, i * 10);
+		ASSERT_NE(Node, nullptr) << "i=" << i;
+		EXPECT_EQ(Node->Value, i * 10);
+	}
+}
+
+TEST(SkipListMock, Find_ControlledLevels)
+{
+	// Levels: 1, 3, 1, 2, 1
+	FMockRandFunc Mock({false, true, true, false, false, true, false, false});
+
+	TK::TSkipList<int, int, TK::TSkipListDefaultComparer<int>, std::less<int>, FMockRandFunc, 4> List(
+		TK::TSkipListDefaultComparer<int>{}, std::less<int>{}, Mock);
+
+	List.Insert(1, 10); // level 1
+	List.Insert(2, 20); // level 3
+	List.Insert(3, 30); // level 1
+	List.Insert(4, 40); // level 2
+	List.Insert(5, 50); // level 1
+
+	// Verify each can be found
+	for (int i = 1; i <= 5; ++i)
+	{
+		auto* Node = List.Find(i, i * 10);
+		ASSERT_NE(Node, nullptr) << "Key=" << i;
+		EXPECT_EQ(Node->Key, i);
+		EXPECT_EQ(Node->Value, i * 10);
+	}
+
+	// Non-existing
+	EXPECT_EQ(List.Find(1, 99), nullptr);
+	EXPECT_EQ(List.Find(99, 10), nullptr);
+}
+
+// ============================================================================
+// 15. Erase Range
+// ============================================================================
+
+TEST(SkipList, EraseRange_EmptyList)
+{
+	IntSkipList List;
+	TK::TRange<int> Range = {{10, false}, {20, false}};
+	EXPECT_EQ(List.Erase(Range), 0);
+	EXPECT_EQ(List.GetSize(), 0);
+	EXPECT_TRUE(List.IsEmpty());
+}
+
+TEST(SkipList, EraseRange_AllElementsAboveRange)
+{
+	IntSkipList List;
+	List.Insert(1, 30);
+	List.Insert(2, 40);
+	List.Insert(3, 50);
+
+	// Range entirely below all elements
+	TK::TRange<int> Range = {{10, false}, {20, false}};
+	EXPECT_EQ(List.Erase(Range), 0);
+	EXPECT_EQ(List.GetSize(), 3);
+	VerifyListOrder(List, {30, 40, 50});
+}
+
+TEST(SkipList, EraseRange_AllElementsBelowRange)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+
+	// Range entirely above all elements
+	TK::TRange<int> Range = {{30, false}, {40, false}};
+	EXPECT_EQ(List.Erase(Range), 0);
+	EXPECT_EQ(List.GetSize(), 2);
+	VerifyListOrder(List, {10, 20});
+}
+
+TEST(SkipList, EraseRange_NoElementsInGap)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 50);
+	List.Insert(4, 60);
+
+	// Range falls in gap between 20 and 50
+	TK::TRange<int> Range = {{25, false}, {45, false}};
+	EXPECT_EQ(List.Erase(Range), 0);
+	EXPECT_EQ(List.GetSize(), 4);
+	VerifyListOrder(List, {10, 20, 50, 60});
+}
+
+TEST(SkipList, EraseRange_SingleElement_Inclusive)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+	List.Insert(4, 40);
+	List.Insert(5, 50);
+
+	// Erase exactly one element: 30
+	TK::TRange<int> Range = {{30, false}, {30, false}};
+	EXPECT_EQ(List.Erase(Range), 1);
+	EXPECT_EQ(List.GetSize(), 4);
+	VerifyListOrder(List, {10, 20, 40, 50});
+	VerifyRandomAccess(List, {10, 20, 40, 50});
+}
+
+TEST(SkipList, EraseRange_SingleElement_ExclusiveLower)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+
+	// (20, 30] — only 30 qualifies
+	TK::TRange<int> Range = {{20, true}, {30, false}};
+	EXPECT_EQ(List.Erase(Range), 1);
+	EXPECT_EQ(List.GetSize(), 2);
+	VerifyListOrder(List, {10, 20});
+}
+
+TEST(SkipList, EraseRange_SingleElement_ExclusiveUpper)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+
+	// [20, 30) — only 20 qualifies
+	TK::TRange<int> Range = {{20, false}, {30, true}};
+	EXPECT_EQ(List.Erase(Range), 1);
+	EXPECT_EQ(List.GetSize(), 2);
+	VerifyListOrder(List, {10, 30});
+}
+
+TEST(SkipList, EraseRange_BothExclusive)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+
+	// (10, 30) — only 20 qualifies
+	TK::TRange<int> Range = {{10, true}, {30, true}};
+	EXPECT_EQ(List.Erase(Range), 1);
+	EXPECT_EQ(List.GetSize(), 2);
+	VerifyListOrder(List, {10, 30});
+}
+
+TEST(SkipList, EraseRange_MultipleElements_Inclusive)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+	List.Insert(4, 40);
+	List.Insert(5, 50);
+
+	// [20, 40] — erases 20, 30, 40
+	TK::TRange<int> Range = {{20, false}, {40, false}};
+	EXPECT_EQ(List.Erase(Range), 3);
+	EXPECT_EQ(List.GetSize(), 2);
+	VerifyListOrder(List, {10, 50});
+	VerifyRandomAccess(List, {10, 50});
+}
+
+TEST(SkipList, EraseRange_FromBeginning)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+	List.Insert(4, 40);
+
+	// Erase everything <= 25 — removes 10, 20
+	TK::TRange<int> Range = {{0, false}, {25, false}};
+	EXPECT_EQ(List.Erase(Range), 2);
+	EXPECT_EQ(List.GetSize(), 2);
+	VerifyListOrder(List, {30, 40});
+	VerifyRandomAccess(List, {30, 40});
+}
+
+TEST(SkipList, EraseRange_ToEnd)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+	List.Insert(4, 40);
+
+	// Erase everything >= 25 — removes 30, 40
+	TK::TRange<int> Range = {{25, false}, {50, false}};
+	EXPECT_EQ(List.Erase(Range), 2);
+	EXPECT_EQ(List.GetSize(), 2);
+	VerifyListOrder(List, {10, 20});
+	VerifyRandomAccess(List, {10, 20});
+}
+
+TEST(SkipList, EraseRange_AllElements)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+
+	// Range covers all elements
+	TK::TRange<int> Range = {{0, false}, {100, false}};
+	EXPECT_EQ(List.Erase(Range), 3);
+	EXPECT_EQ(List.GetSize(), 0);
+	EXPECT_TRUE(List.IsEmpty());
+	EXPECT_EQ(List.At(0), nullptr);
+}
+
+TEST(SkipList, EraseRange_InvalidRange_LowerGreaterThanUpper)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+
+	TK::TRange<int> Range = {{30, false}, {10, false}};
+	EXPECT_EQ(List.Erase(Range), 0);
+	EXPECT_EQ(List.GetSize(), 2);
+	VerifyListOrder(List, {10, 20});
+}
+
+TEST(SkipList, EraseRange_InvalidRange_EqualExclusive)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+
+	// [20, 20) — empty range
+	TK::TRange<int> Range1 = {{20, false}, {20, true}};
+	EXPECT_EQ(List.Erase(Range1), 0);
+
+	// (20, 20] — empty range
+	TK::TRange<int> Range2 = {{20, true}, {20, false}};
+	EXPECT_EQ(List.Erase(Range2), 0);
+
+	// (20, 20) — empty range
+	TK::TRange<int> Range3 = {{20, true}, {20, true}};
+	EXPECT_EQ(List.Erase(Range3), 0);
+
+	EXPECT_EQ(List.GetSize(), 2);
+}
+
+TEST(SkipList, EraseRange_PrevPointersAfterErase)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+	List.Insert(4, 40);
+	List.Insert(5, 50);
+
+	// Erase middle: 20, 30, 40
+	TK::TRange<int> Range = {{20, false}, {40, false}};
+	List.Erase(Range);
+
+	// 50's prev should now be 10
+	auto* Node50 = List.At(1);
+	ASSERT_NE(Node50, nullptr);
+	EXPECT_EQ(Node50->Value, 50);
+	ASSERT_NE(Node50->GetPrev(), nullptr);
+	EXPECT_EQ(Node50->GetPrev()->Value, 10);
+
+	// 10's next should be 50
+	auto* Node10 = List.At(0);
+	ASSERT_NE(Node10, nullptr);
+	EXPECT_EQ(Node10->Value, 10);
+	ASSERT_NE(Node10->GetNext(), nullptr);
+	EXPECT_EQ(Node10->GetNext()->Value, 50);
+}
+
+TEST(SkipList, EraseRange_PrevPointer_EraseFromBeginning)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+
+	// Erase first two elements
+	TK::TRange<int> Range = {{0, false}, {20, false}};
+	List.Erase(Range);
+
+	// Remaining element (30) should have prev == nullptr
+	auto* Node30 = List.At(0);
+	ASSERT_NE(Node30, nullptr);
+	EXPECT_EQ(Node30->Value, 30);
+	EXPECT_EQ(Node30->GetPrev(), nullptr);
+}
+
+TEST(SkipList, EraseRange_PrevPointer_EraseToEnd)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+
+	// Erase last two elements
+	TK::TRange<int> Range = {{20, false}, {40, false}};
+	List.Erase(Range);
+
+	// Remaining element (10) should be the only one
+	EXPECT_EQ(List.GetSize(), 1);
+	auto* Node10 = List.At(0);
+	ASSERT_NE(Node10, nullptr);
+	EXPECT_EQ(Node10->Value, 10);
+	EXPECT_EQ(Node10->GetNext(), nullptr);
+}
+
+TEST(SkipList, EraseRange_InsertAfterErase)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+	List.Insert(4, 40);
+	List.Insert(5, 50);
+
+	// Erase middle
+	TK::TRange<int> Range = {{20, false}, {40, false}};
+	List.Erase(Range);
+
+	// Insert new element in the gap
+	auto [Ok, Node] = List.Insert(6, 25);
+	EXPECT_TRUE(Ok);
+	ASSERT_NE(Node, nullptr);
+
+	EXPECT_EQ(List.GetSize(), 3);
+	VerifyListOrder(List, {10, 25, 50});
+	VerifyRandomAccess(List, {10, 25, 50});
+}
+
+TEST(SkipList, EraseRange_SizeUpdatedCorrectly)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+	{
+		List.Insert(i, i * 10);
+	}
+	EXPECT_EQ(List.GetSize(), 10);
+
+	// Erase [30, 60] → values 30, 40, 50, 60 → 4 elements
+	TK::TRange<int> Range = {{30, false}, {60, false}};
+	List.Erase(Range);
+	EXPECT_EQ(List.GetSize(), 6);
+
+	// Erase remaining
+	TK::TRange<int> Range2 = {{0, false}, {100, false}};
+	List.Erase(Range2);
+	EXPECT_EQ(List.GetSize(), 0);
+	EXPECT_TRUE(List.IsEmpty());
+}
+
+TEST(SkipList, EraseRange_ReinsertSameValues)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+
+	TK::TRange<int> Range = {{15, false}, {25, false}};
+	EXPECT_EQ(List.Erase(Range), 1); // erases 20
+	EXPECT_EQ(List.GetSize(), 2);
+
+	// Re-insert with same key-value
+	auto [Ok, Node] = List.Insert(2, 20);
+	EXPECT_TRUE(Ok);
+	EXPECT_EQ(List.GetSize(), 3);
+	VerifyListOrder(List, {10, 20, 30});
+}
+
+TEST(SkipList, EraseRange_AtCorrectAfterPartialErase)
+{
+	IntSkipList List;
+	for (int i = 0; i < 20; ++i)
+	{
+		List.Insert(i, i * 10); // values: 0, 10, 20, ..., 190
+	}
+
+	// Erase values 40-120 → indices 4-12 → 9 elements
+	TK::TRange<int> Range = {{40, false}, {120, false}};
+	List.Erase(Range);
+
+	EXPECT_EQ(List.GetSize(), 11);
+
+	// Verify remaining elements via At()
+	// Should be: 0,10,20,30,130,140,150,160,170,180,190
+	std::vector<int> Expected = {0, 10, 20, 30, 130, 140, 150, 160, 170, 180, 190};
+	VerifyListOrder(List, Expected);
+	VerifyRandomAccess(List, Expected);
+}
+
+TEST(SkipList, EraseRange_TailUpdatedWhenErasingTail)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+
+	// Erase the last element
+	TK::TRange<int> Range = {{30, false}, {30, false}};
+	List.Erase(Range);
+
+	EXPECT_EQ(List.GetSize(), 2);
+	auto* Last = List.At(1);
+	ASSERT_NE(Last, nullptr);
+	EXPECT_EQ(Last->Value, 20);
+	EXPECT_EQ(Last->GetNext(), nullptr); // should be the new tail
+}
+
+TEST(SkipList, EraseRange_MultipleRanges_Sequential)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+	{
+		List.Insert(i, i * 10); // 0, 10, 20, ..., 90
+	}
+
+	// Erase [10, 30]
+	TK::TRange<int> Range1 = {{10, false}, {30, false}};
+	EXPECT_EQ(List.Erase(Range1), 3); // removes 10, 20, 30
+	VerifyListOrder(List, {0, 40, 50, 60, 70, 80, 90});
+
+	// Erase [60, 80]
+	TK::TRange<int> Range2 = {{60, false}, {80, false}};
+	EXPECT_EQ(List.Erase(Range2), 3); // removes 60, 70, 80
+	VerifyListOrder(List, {0, 40, 50, 90});
+
+	// Erase the rest
+	TK::TRange<int> Range3 = {{0, false}, {100, false}};
+	EXPECT_EQ(List.Erase(Range3), 4);
+	EXPECT_TRUE(List.IsEmpty());
+}
+
+TEST(SkipList, EraseRange_ContainsAnyInRange_AfterErase)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+	List.Insert(4, 40);
+
+	// Erase [20, 30]
+	TK::TRange<int> EraseRange = {{20, false}, {30, false}};
+	List.Erase(EraseRange);
+
+	// Now [25, 35] should return false (no elements in range)
+	TK::TRange<int> QueryRange = {{25, false}, {35, false}};
+	EXPECT_FALSE(List.ContainsAnyInRange(QueryRange));
+
+	// [5, 15] should still contain 10
+	TK::TRange<int> QueryRange2 = {{5, false}, {15, false}};
+	EXPECT_TRUE(List.ContainsAnyInRange(QueryRange2));
+}
+
+TEST(SkipListFlat, EraseRange)
+{
+	FlatSkipList List;
+	for (int i = 0; i < 20; ++i)
+	{
+		List.Insert(i, i * 5); // values: 0, 5, 10, ..., 95
+	}
+
+	// Erase [25, 60] → values 25,30,35,40,45,50,55,60 → 8 elements
+	TK::TRange<int> Range = {{25, false}, {60, false}};
+	EXPECT_EQ(List.Erase(Range), 8);
+	EXPECT_EQ(List.GetSize(), 12);
+
+	// Verify remaining elements
+	std::vector<int> Expected;
+	for (int i = 0; i < 20; ++i)
+	{
+		int v = i * 5;
+		if (v < 25 || v > 60)
+			Expected.push_back(v);
+	}
+	EXPECT_EQ(Expected.size(), 12u);
+	VerifyListOrder(List, Expected);
+	VerifyRandomAccess(List, Expected);
+}
+
+TEST(SkipListTall, EraseRange)
+{
+	TallSkipList List;
+	for (int i = 0; i < 15; ++i)
+	{
+		List.Insert(i, i * 10); // values: 0, 10, ..., 140
+	}
+
+	// Erase [30, 90] → 30,40,50,60,70,80,90 → 7 elements
+	TK::TRange<int> Range = {{30, false}, {90, false}};
+	EXPECT_EQ(List.Erase(Range), 7);
+	EXPECT_EQ(List.GetSize(), 8);
+
+	std::vector<int> Expected = {0, 10, 20, 100, 110, 120, 130, 140};
+	VerifyListOrder(List, Expected);
+	VerifyRandomAccess(List, Expected);
+}
+
+TEST(SkipListMock, EraseRange_ControlledLevels)
+{
+	// Levels: 1, 3, 1, 2, 1
+	FMockRandFunc Mock({false, true, true, false, false, true, false, false});
+
+	TK::TSkipList<int, int, TK::TSkipListDefaultComparer<int>, std::less<int>, FMockRandFunc, 4> List(
+		TK::TSkipListDefaultComparer<int>{}, std::less<int>{}, Mock);
+
+	List.Insert(1, 10); // level 1
+	List.Insert(2, 20); // level 3
+	List.Insert(3, 30); // level 1
+	List.Insert(4, 40); // level 2
+	List.Insert(5, 50); // level 1
+
+	// Erase [25, 45] → removes 30, 40 (both have diff levels)
+	TK::TRange<int> Range = {{25, false}, {45, false}};
+	EXPECT_EQ(List.Erase(Range), 2);
+	EXPECT_EQ(List.GetSize(), 3);
+
+	VerifyListOrder(List, {10, 20, 50});
+	VerifyRandomAccess(List, {10, 20, 50});
+}
+
+// ============================================================================
+// 16. GetCountInRange
+// ============================================================================
+
+TEST(SkipList, GetCountInRange_EmptyList)
+{
+	IntSkipList List;
+	TK::TRange<int> Range = {{10, false}, {20, false}};
+	EXPECT_EQ(List.GetCountInRange(Range), 0);
+}
+
+TEST(SkipList, GetCountInRange_NoElementsInRange)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+
+	// Range above all elements
+	TK::TRange<int> Range = {{30, false}, {40, false}};
+	EXPECT_EQ(List.GetCountInRange(Range), 0);
+}
+
+TEST(SkipList, GetCountInRange_AllElementsInRange)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+
+	// Range covers everything
+	TK::TRange<int> Range = {{0, false}, {100, false}};
+	EXPECT_EQ(List.GetCountInRange(Range), 3);
+}
+
+TEST(SkipList, GetCountInRange_PartialRange)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+	{
+		List.Insert(i, i * 10); // values: 0, 10, ..., 90
+	}
+
+	// [25, 65] → values 30, 40, 50, 60 → 4 elements
+	TK::TRange<int> Range = {{25, false}, {65, false}};
+	EXPECT_EQ(List.GetCountInRange(Range), 4);
+}
+
+TEST(SkipList, GetCountInRange_ExclusiveBounds)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+	List.Insert(4, 40);
+
+	// (10, 40) → only 20, 30 → 2 elements
+	TK::TRange<int> Range = {{10, true}, {40, true}};
+	EXPECT_EQ(List.GetCountInRange(Range), 2);
+}
+
+TEST(SkipList, GetCountInRange_SingleElement_ExactMatch)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+
+	// [20, 20] → exactly 1
+	TK::TRange<int> Range = {{20, false}, {20, false}};
+	EXPECT_EQ(List.GetCountInRange(Range), 1);
+}
+
+TEST(SkipList, GetCountInRange_InclusiveVsExclusive_Difference)
+{
+	IntSkipList List;
+	for (int i = 0; i <= 10; ++i)
+	{
+		List.Insert(i, i * 10); // values: 0, 10, ..., 100
+	}
+
+	// Inclusive [20, 80] → 20,30,40,50,60,70,80 → 7
+	TK::TRange<int> RangeIncl = {{20, false}, {80, false}};
+	EXPECT_EQ(List.GetCountInRange(RangeIncl), 7);
+
+	// Exclusive (20, 80) → 30,40,50,60,70 → 5
+	TK::TRange<int> RangeExcl = {{20, true}, {80, true}};
+	EXPECT_EQ(List.GetCountInRange(RangeExcl), 5);
+}
+
+TEST(SkipList, GetCountInRange_BeforeAndAfterErase)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+	{
+		List.Insert(i, i * 10); // 0, 10, ..., 90
+	}
+
+	// Before erase: [40, 60] → 3 elements
+	TK::TRange<int> Range = {{40, false}, {60, false}};
+	EXPECT_EQ(List.GetCountInRange(Range), 3);
+
+	// Erase [30, 50] → removes 30, 40, 50
+	TK::TRange<int> EraseRange = {{30, false}, {50, false}};
+	List.Erase(EraseRange);
+
+	// After erase: [40, 60] → only 60 → 1 element
+	EXPECT_EQ(List.GetCountInRange(Range), 1);
+}
+
+TEST(SkipList, GetCountInRange_CountMatchesManual)
+{
+	IntSkipList List;
+	std::mt19937 Rng(99);
+	std::uniform_int_distribution<int> Dist(0, 100);
+
+	for (int i = 0; i < 50; ++i)
+	{
+		List.Insert(Dist(Rng), Dist(Rng));
+	}
+
+	// Query a random range and verify against manual count via At()
+	TK::TRange<int> Range = {{30, false}, {60, false}};
+	int Count = List.GetCountInRange(Range);
+
+	int ManualCount = 0;
+	for (int i = 0; i < List.GetSize(); ++i)
+	{
+		auto* Node = List.At(i);
+		if (Node->Value >= 30 && Node->Value <= 60)
+			++ManualCount;
+	}
+	EXPECT_EQ(Count, ManualCount);
+}
+
+TEST(SkipListFlat, GetCountInRange)
+{
+	FlatSkipList List;
+	for (int i = 0; i < 30; ++i)
+	{
+		List.Insert(i, i * 2); // 0, 2, 4, ..., 58
+	}
+
+	// [20, 40] → values 20,22,24,...,40 → 11 elements
+	TK::TRange<int> Range = {{20, false}, {40, false}};
+	EXPECT_EQ(List.GetCountInRange(Range), 11);
+}
+
+TEST(SkipListTall, GetCountInRange)
+{
+	TallSkipList List;
+	for (int i = 0; i < 20; ++i)
+	{
+		List.Insert(i, i * 5); // 0, 5, 10, ..., 95
+	}
+
+	// [25, 75] → 25,30,...,75 → 11 elements
+	TK::TRange<int> Range = {{25, false}, {75, false}};
+	EXPECT_EQ(List.GetCountInRange(Range), 11);
+}
