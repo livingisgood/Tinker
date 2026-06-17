@@ -168,6 +168,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="DataStructure\SkipList.h" />
+    <ClInclude Include="DataStructure\ZSet.h" />
     <ClInclude Include="Serialization\LargeObject.h" />
     <ClInclude Include="Serialization\MemoryReader.h" />
     <ClInclude Include="Serialization\InStream.h" />
