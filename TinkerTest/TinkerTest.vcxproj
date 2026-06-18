@@ -38,6 +38,7 @@
   <ItemGroup>
     <ClCompile Include="testSerialize.cpp" />
     <ClCompile Include="testSkipList.cpp" />
+    <ClCompile Include="testZSet.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

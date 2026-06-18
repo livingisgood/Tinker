@@ -1571,7 +1571,7 @@ TEST(SkipList, Find_FirstElement)
 	List.Insert(2, 20);
 	List.Insert(3, 30);
 
-	auto* Node = List.Find(1, 10);
+	auto* Node = List.Find(1, 10).first;
 	ASSERT_NE(Node, nullptr);
 	EXPECT_EQ(Node->Key, 1);
 	EXPECT_EQ(Node->Value, 10);
@@ -1585,7 +1585,7 @@ TEST(SkipList, Find_MiddleElement)
 		List.Insert(i, i * 10);
 	}
 
-	auto* Node = List.Find(5, 50);
+	auto* Node = List.Find(5, 50).first;
 	ASSERT_NE(Node, nullptr);
 	EXPECT_EQ(Node->Key, 5);
 	EXPECT_EQ(Node->Value, 50);
@@ -1598,7 +1598,7 @@ TEST(SkipList, Find_LastElement)
 	List.Insert(2, 20);
 	List.Insert(3, 30);
 
-	auto* Node = List.Find(3, 30);
+	auto* Node = List.Find(3, 30).first;
 	ASSERT_NE(Node, nullptr);
 	EXPECT_EQ(Node->Key, 3);
 	EXPECT_EQ(Node->Value, 30);
@@ -1610,7 +1610,7 @@ TEST(SkipList, Find_NotExist_WrongKey)
 	List.Insert(1, 10);
 	List.Insert(2, 20);
 
-	EXPECT_EQ(List.Find(3, 30), nullptr);
+	EXPECT_EQ(List.Find(3, 30).first, nullptr);
 }
 
 TEST(SkipList, Find_NotExist_WrongValue)
@@ -1618,13 +1618,13 @@ TEST(SkipList, Find_NotExist_WrongValue)
 	IntSkipList List;
 	List.Insert(1, 10);
 
-	EXPECT_EQ(List.Find(1, 99), nullptr);
+	EXPECT_EQ(List.Find(1, 99).first, nullptr);
 }
 
 TEST(SkipList, Find_EmptyList)
 {
 	IntSkipList List;
-	EXPECT_EQ(List.Find(1, 10), nullptr);
+	EXPECT_EQ(List.Find(1, 10).first, nullptr);
 }
 
 TEST(SkipList, Find_AfterClear)
@@ -1634,7 +1634,7 @@ TEST(SkipList, Find_AfterClear)
 	List.Insert(2, 20);
 	List.Clear();
 
-	EXPECT_EQ(List.Find(1, 10), nullptr);
+	EXPECT_EQ(List.Find(1, 10).first, nullptr);
 }
 
 TEST(SkipList, Find_AfterErase)
@@ -1646,9 +1646,9 @@ TEST(SkipList, Find_AfterErase)
 
 	List.Erase(2, 20);
 
-	EXPECT_EQ(List.Find(2, 20), nullptr);
-	EXPECT_NE(List.Find(1, 10), nullptr);
-	EXPECT_NE(List.Find(3, 30), nullptr);
+	EXPECT_EQ(List.Find(2, 20).first, nullptr);
+	EXPECT_NE(List.Find(1, 10).first, nullptr);
+	EXPECT_NE(List.Find(3, 30).first, nullptr);
 }
 
 TEST(SkipList, Find_ConsistencyWithAt)
@@ -1668,7 +1668,7 @@ TEST(SkipList, Find_ConsistencyWithAt)
 	{
 		auto* NodeByAt = List.At(i);
 		ASSERT_NE(NodeByAt, nullptr) << "i=" << i;
-		auto* NodeByFind = List.Find(NodeByAt->Key, NodeByAt->Value);
+		auto* NodeByFind = List.Find(NodeByAt->Key, NodeByAt->Value).first;
 		EXPECT_EQ(NodeByFind, NodeByAt) << "i=" << i;
 	}
 }
@@ -1680,12 +1680,12 @@ TEST(SkipList, Find_WithValueBasedOrdering)
 	List.Insert(1, 100); // value 100, key 1
 	List.Insert(2, 200); // value 200, key 2
 
-	auto* Node = List.Find(1, 100);
+	auto* Node = List.Find(1, 100).first;
 	ASSERT_NE(Node, nullptr);
 	EXPECT_EQ(Node->Value, 100);
 	EXPECT_EQ(Node->GetPrev(), nullptr); // first in sorted order
 
-	Node = List.Find(3, 300);
+	Node = List.Find(3, 300).first;
 	ASSERT_NE(Node, nullptr);
 	EXPECT_EQ(Node->Value, 300);
 	EXPECT_EQ(Node->GetNext(), nullptr); // last in sorted order
@@ -1699,9 +1699,9 @@ TEST(SkipList, Find_SameValue_DifferentKey)
 	List.Insert(2, 100);
 
 	// All have value 100; distinguish by key
-	auto* Node1 = List.Find(1, 100);
-	auto* Node2 = List.Find(2, 100);
-	auto* Node3 = List.Find(3, 100);
+	auto* Node1 = List.Find(1, 100).first;
+	auto* Node2 = List.Find(2, 100).first;
+	auto* Node3 = List.Find(3, 100).first;
 
 	ASSERT_NE(Node1, nullptr);
 	ASSERT_NE(Node2, nullptr);
@@ -1720,7 +1720,7 @@ TEST(SkipList, Find_NextPrevAfterFind)
 	List.Insert(5, 50);
 
 	// Find middle and traverse neighbors
-	auto* Node = List.Find(3, 30);
+	auto* Node = List.Find(3, 30).first;
 	ASSERT_NE(Node, nullptr);
 
 	auto* Prev = Node->GetPrev();
@@ -1737,7 +1737,7 @@ TEST(SkipList, Find_DuplicateInsert_ReturnsExistingNode)
 	auto [InsertedNode, Ok1] = List.Insert(1, 100);
 	EXPECT_TRUE(Ok1);
 
-	auto* FoundNode = List.Find(1, 100);
+	auto* FoundNode = List.Find(1, 100).first;
 	EXPECT_EQ(FoundNode, InsertedNode);
 }
 
@@ -1751,13 +1751,13 @@ TEST(SkipListFlat, Find_AllLevelOne)
 
 	for (int i = 0; i < 50; ++i)
 	{
-		auto* Node = List.Find(i, i * 10);
+		auto* Node = List.Find(i, i * 10).first;
 		ASSERT_NE(Node, nullptr) << "i=" << i;
 		EXPECT_EQ(Node->Value, i * 10) << "i=" << i;
 	}
 
-	EXPECT_EQ(List.Find(0, 99), nullptr);
-	EXPECT_EQ(List.Find(99, 990), nullptr);
+	EXPECT_EQ(List.Find(0, 99).first, nullptr);
+	EXPECT_EQ(List.Find(99, 990).first, nullptr);
 }
 
 TEST(SkipListTall, Find_MultiLevel)
@@ -1770,7 +1770,7 @@ TEST(SkipListTall, Find_MultiLevel)
 
 	for (int i = 0; i < 30; ++i)
 	{
-		auto* Node = List.Find(i, i * 10);
+		auto* Node = List.Find(i, i * 10).first;
 		ASSERT_NE(Node, nullptr) << "i=" << i;
 		EXPECT_EQ(Node->Value, i * 10);
 	}
@@ -1793,15 +1793,85 @@ TEST(SkipListMock, Find_ControlledLevels)
 	// Verify each can be found
 	for (int i = 1; i <= 5; ++i)
 	{
-		auto* Node = List.Find(i, i * 10);
+		auto* Node = List.Find(i, i * 10).first;
 		ASSERT_NE(Node, nullptr) << "Key=" << i;
 		EXPECT_EQ(Node->Key, i);
 		EXPECT_EQ(Node->Value, i * 10);
 	}
 
 	// Non-existing
-	EXPECT_EQ(List.Find(1, 99), nullptr);
-	EXPECT_EQ(List.Find(99, 10), nullptr);
+	EXPECT_EQ(List.Find(1, 99).first, nullptr);
+	EXPECT_EQ(List.Find(99, 10).first, nullptr);
+}
+
+TEST(SkipList, Find_NotFound_ReturnsInsertionRank)
+{
+	IntSkipList List;
+	List.Insert(1, 10);  // rank 0
+	List.Insert(3, 30);  // rank 1
+	List.Insert(5, 50);  // rank 2
+
+	// value 0 would go before 10 → insertion rank 0
+	auto [Node0, Rank0] = List.Find(0, 0);
+	EXPECT_EQ(Node0, nullptr);
+	EXPECT_EQ(Rank0, 0);
+
+	// value 20 would go between 10 and 30 → insertion rank 1
+	auto [Node20, Rank20] = List.Find(2, 20);
+	EXPECT_EQ(Node20, nullptr);
+	EXPECT_EQ(Rank20, 1);
+
+	// value 40 would go between 30 and 50 → insertion rank 2
+	auto [Node40, Rank40] = List.Find(4, 40);
+	EXPECT_EQ(Node40, nullptr);
+	EXPECT_EQ(Rank40, 2);
+
+	// value 60 would go after all → insertion rank 3
+	auto [Node60, Rank60] = List.Find(6, 60);
+	EXPECT_EQ(Node60, nullptr);
+	EXPECT_EQ(Rank60, 3);
+}
+
+TEST(SkipList, Find_NotFound_EmptyList)
+{
+	IntSkipList List;
+	auto [Node, Rank] = List.Find(1, 10);
+	EXPECT_EQ(Node, nullptr);
+	EXPECT_EQ(Rank, 0); // only position in empty list
+}
+
+TEST(SkipList, Find_Found_ReturnsCorrectRank)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 30);
+
+	auto [Node0, Rank0] = List.Find(1, 10);
+	ASSERT_NE(Node0, nullptr);
+	EXPECT_EQ(Rank0, 0);
+
+	auto [Node1, Rank1] = List.Find(2, 20);
+	ASSERT_NE(Node1, nullptr);
+	EXPECT_EQ(Rank1, 1);
+
+	auto [Node2, Rank2] = List.Find(3, 30);
+	ASSERT_NE(Node2, nullptr);
+	EXPECT_EQ(Rank2, 2);
+}
+
+TEST(SkipList, Find_RankConsistentWithGetRank)
+{
+	IntSkipList List;
+	for (int i = 0; i < 50; ++i)
+		List.Insert(i, i * 10);
+
+	for (int i = 0; i < 50; ++i)
+	{
+		auto [Node, Rank] = List.Find(i, i * 10);
+		ASSERT_NE(Node, nullptr);
+		EXPECT_EQ(Rank, List.GetRank(i, i * 10));
+	}
 }
 
 // ============================================================================
@@ -3713,4 +3783,399 @@ TEST(SkipList, EraseByRank_RepeatedEraseAndInsert)
 		for (int i = 0; i < 20; ++i) v[i] = i;
 		return v;
 	}());
+}
+
+// ============================================================================
+// 22. GetNthInLowerBound
+// ============================================================================
+
+TEST(SkipList, GetNthInLowerBound_FirstSatisfiesBound)
+{
+	IntSkipList List;
+	for (int i = 0; i < 20; ++i)
+		List.Insert(i, i * 10); // 0, 10, ..., 190
+
+	// LowerBound <= 0: first element already satisfies → At(N)
+	TK::TRangeBound<int> Bound = {0, false};
+	auto [Node, Rank] = List.GetNthInLowerBound(0, Bound);
+	ASSERT_NE(Node, nullptr);
+	EXPECT_EQ(Node->Value, 0);
+	EXPECT_EQ(Rank, 0);
+
+	auto [Node2, Rank2] = List.GetNthInLowerBound(5, Bound);
+	ASSERT_NE(Node2, nullptr);
+	EXPECT_EQ(Node2->Value, 50);
+	EXPECT_EQ(Rank2, 5);
+}
+
+TEST(SkipList, GetNthInLowerBound_N0_FirstInBound)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10); // 0, 10, ..., 90
+
+	// LowerBound = 25: first >= 25 is 30
+	TK::TRangeBound<int> Bound = {25, false};
+	auto [Node, Rank] = List.GetNthInLowerBound(0, Bound);
+	ASSERT_NE(Node, nullptr);
+	EXPECT_EQ(Node->Value, 30);
+	EXPECT_EQ(Rank, 3);
+}
+
+TEST(SkipList, GetNthInLowerBound_N1)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10);
+
+	TK::TRangeBound<int> Bound = {25, false};
+	auto [Node, Rank] = List.GetNthInLowerBound(1, Bound);
+	ASSERT_NE(Node, nullptr);
+	EXPECT_EQ(Node->Value, 40); // second element >= 25
+	EXPECT_EQ(Rank, 4);
+}
+
+TEST(SkipList, GetNthInLowerBound_LastInBound)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10);
+
+	// LowerBound = 25: elements >= 25 are 30,40,50,60,70,80,90 (7 elements)
+	// IndexInBound = 6 → last one (90)
+	TK::TRangeBound<int> Bound = {25, false};
+	auto [Node, Rank] = List.GetNthInLowerBound(6, Bound);
+	ASSERT_NE(Node, nullptr);
+	EXPECT_EQ(Node->Value, 90);
+	EXPECT_EQ(Rank, 9);
+}
+
+TEST(SkipList, GetNthInLowerBound_Overshoot)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10);
+
+	// LowerBound = 25: only 7 elements >= 25. IndexInBound = 7 overshoots
+	TK::TRangeBound<int> Bound = {25, false};
+	auto [Node, Rank] = List.GetNthInLowerBound(7, Bound);
+	EXPECT_EQ(Node, nullptr);
+	EXPECT_EQ(Rank, -1);
+}
+
+TEST(SkipList, GetNthInLowerBound_Empty)
+{
+	IntSkipList List;
+	TK::TRangeBound<int> Bound = {10, false};
+	auto [Node, Rank] = List.GetNthInLowerBound(0, Bound);
+	EXPECT_EQ(Node, nullptr);
+	EXPECT_EQ(Rank, -1);
+}
+
+TEST(SkipList, GetNthInLowerBound_AllBelowBound)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+
+	// All elements < 50 → OutOfLowerBound(Tail, 50) = true
+	TK::TRangeBound<int> Bound = {50, false};
+	auto [Node, Rank] = List.GetNthInLowerBound(0, Bound);
+	EXPECT_EQ(Node, nullptr);
+	EXPECT_EQ(Rank, -1);
+}
+
+TEST(SkipList, GetNthInLowerBound_IndexInBoundNegative)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+
+	TK::TRangeBound<int> Bound = {0, false};
+	auto [Node, Rank] = List.GetNthInLowerBound(-1, Bound);
+	EXPECT_EQ(Node, nullptr);
+	EXPECT_EQ(Rank, -1);
+}
+
+TEST(SkipList, GetNthInLowerBound_IndexInBoundExceedsSize)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+
+	TK::TRangeBound<int> Bound = {0, false};
+	auto [Node, Rank] = List.GetNthInLowerBound(5, Bound);
+	EXPECT_EQ(Node, nullptr);
+	EXPECT_EQ(Rank, -1);
+}
+
+TEST(SkipList, GetNthInLowerBound_ExclusiveBound)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10);
+
+	// (20, ...] → first > 20 is 30
+	TK::TRangeBound<int> Bound = {20, true};
+	auto [Node, Rank] = List.GetNthInLowerBound(0, Bound);
+	ASSERT_NE(Node, nullptr);
+	EXPECT_EQ(Node->Value, 30);
+	EXPECT_EQ(Rank, 3);
+
+	// (20, ...] → second > 20 is 40
+	auto [Node2, Rank2] = List.GetNthInLowerBound(1, Bound);
+	ASSERT_NE(Node2, nullptr);
+	EXPECT_EQ(Node2->Value, 40);
+	EXPECT_EQ(Rank2, 4);
+}
+
+TEST(SkipList, GetNthInLowerBound_NearSearchPath)
+{
+	IntSkipList List;
+	for (int i = 0; i < 30; ++i)
+		List.Insert(i, i * 5); // 0, 5, 10, ..., 145
+
+	// LowerBound = 47: first >= 47 is 50 → rank 10
+	// IndexInBound = 3 (< NearSearch=10) → near-search path
+	TK::TRangeBound<int> Bound = {47, false};
+	auto [Node, Rank] = List.GetNthInLowerBound(3, Bound);
+	ASSERT_NE(Node, nullptr);
+	// Elements >= 47: 50(10), 55(11), 60(12), 65(13)
+	EXPECT_EQ(Node->Value, 65);
+	EXPECT_EQ(Rank, 13);
+}
+
+TEST(SkipList, GetNthInLowerBound_MainPath_LargeN)
+{
+	IntSkipList List;
+	for (int i = 0; i < 30; ++i)
+		List.Insert(i, i * 5);
+
+	// LowerBound = 47: first >= 47 is 50 → rank 10
+	// IndexInBound = 15 (> NearSearch=10) → main skip-search path
+	TK::TRangeBound<int> Bound = {47, false};
+	auto [Node, Rank] = List.GetNthInLowerBound(15, Bound);
+	ASSERT_NE(Node, nullptr);
+	// Elements >= 47: 50(10), 55(11), ..., 125(25)
+	EXPECT_EQ(Node->Value, 125);
+	EXPECT_EQ(Rank, 25);
+}
+
+TEST(SkipList, GetNthInLowerBound_RankConsistentWithAt)
+{
+	IntSkipList List;
+	for (int i = 0; i < 40; ++i)
+		List.Insert(i, i * 10);
+
+	TK::TRangeBound<int> Bound = {150, false};
+	for (int n = 0; n < 25; ++n)
+	{
+		auto [Node, Rank] = List.GetNthInLowerBound(n, Bound);
+		ASSERT_NE(Node, nullptr) << "n=" << n;
+		auto* NodeByAt = List.At(Rank);
+		EXPECT_EQ(Node, NodeByAt) << "n=" << n;
+	}
+}
+
+TEST(SkipList, GetNthInLowerBound_ConsistentWithGetFirstInLowerBound)
+{
+	IntSkipList List;
+	for (int i = 0; i < 20; ++i)
+		List.Insert(i, i * 10);
+
+	TK::TRangeBound<int> Bound = {55, false};
+	// GetNthInLowerBound(0) should match GetFirstInLowerBound
+	auto [NodeNth, RankNth] = List.GetNthInLowerBound(0, Bound);
+	auto [NodeFirst, RankFirst] = List.GetFirstInLowerBound(Bound);
+	EXPECT_EQ(NodeNth, NodeFirst);
+	EXPECT_EQ(RankNth, RankFirst);
+}
+
+// ============================================================================
+// 23. GetLastNthInUpperBound
+// ============================================================================
+
+TEST(SkipList, GetLastNthInUpperBound_AllSatisfyBound)
+{
+	IntSkipList List;
+	for (int i = 0; i < 20; ++i)
+		List.Insert(i, i * 10); // 0, 10, ..., 190
+
+	// UpperBound >= 190: last element satisfies → At(Size - 1 - N)
+	TK::TRangeBound<int> Bound = {200, false};
+	auto [Node, Rank] = List.GetLastNthInUpperBound(0, Bound);
+	ASSERT_NE(Node, nullptr);
+	EXPECT_EQ(Node->Value, 190); // last element
+	EXPECT_EQ(Rank, 19);
+
+	auto [Node2, Rank2] = List.GetLastNthInUpperBound(3, Bound);
+	ASSERT_NE(Node2, nullptr);
+	EXPECT_EQ(Node2->Value, 160); // 4th from last
+	EXPECT_EQ(Rank2, 16);
+}
+
+TEST(SkipList, GetLastNthInUpperBound_Reverse0_LastInBound)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10); // 0, 10, ..., 90
+
+	// UpperBound = 65: last <= 65 is 60
+	TK::TRangeBound<int> Bound = {65, false};
+	auto [Node, Rank] = List.GetLastNthInUpperBound(0, Bound);
+	ASSERT_NE(Node, nullptr);
+	EXPECT_EQ(Node->Value, 60);
+	EXPECT_EQ(Rank, 6);
+}
+
+TEST(SkipList, GetLastNthInUpperBound_Reverse1_SecondToLast)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10);
+
+	// UpperBound = 65: elements <= 65 are 0..60. ReverseIndex=1 → 50
+	TK::TRangeBound<int> Bound = {65, false};
+	auto [Node, Rank] = List.GetLastNthInUpperBound(1, Bound);
+	ASSERT_NE(Node, nullptr);
+	EXPECT_EQ(Node->Value, 50);
+	EXPECT_EQ(Rank, 5);
+}
+
+TEST(SkipList, GetLastNthInUpperBound_NotEnoughElements)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10);
+
+	// UpperBound = 45: last <= 45 is 40 at rank 4. Only 5 elements.
+	// ReverseIndex=5 needs 6 elements → overshoot
+	TK::TRangeBound<int> Bound = {45, false};
+	auto [Node, Rank] = List.GetLastNthInUpperBound(5, Bound);
+	EXPECT_EQ(Node, nullptr);
+	EXPECT_EQ(Rank, -1);
+}
+
+TEST(SkipList, GetLastNthInUpperBound_Empty)
+{
+	IntSkipList List;
+	TK::TRangeBound<int> Bound = {10, false};
+	auto [Node, Rank] = List.GetLastNthInUpperBound(0, Bound);
+	EXPECT_EQ(Node, nullptr);
+	EXPECT_EQ(Rank, -1);
+}
+
+TEST(SkipList, GetLastNthInUpperBound_AllAboveBound)
+{
+	IntSkipList List;
+	List.Insert(1, 50);
+	List.Insert(2, 60);
+
+	// All elements > 40 → OutOfUpperBound(Head, 40) = true
+	TK::TRangeBound<int> Bound = {40, false};
+	auto [Node, Rank] = List.GetLastNthInUpperBound(0, Bound);
+	EXPECT_EQ(Node, nullptr);
+	EXPECT_EQ(Rank, -1);
+}
+
+TEST(SkipList, GetLastNthInUpperBound_ReverseIndexNegative)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+
+	TK::TRangeBound<int> Bound = {50, false};
+	auto [Node, Rank] = List.GetLastNthInUpperBound(-1, Bound);
+	EXPECT_EQ(Node, nullptr);
+	EXPECT_EQ(Rank, -1);
+}
+
+TEST(SkipList, GetLastNthInUpperBound_ReverseIndexExceedsSize)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+
+	TK::TRangeBound<int> Bound = {50, false};
+	auto [Node, Rank] = List.GetLastNthInUpperBound(5, Bound);
+	EXPECT_EQ(Node, nullptr);
+	EXPECT_EQ(Rank, -1);
+}
+
+TEST(SkipList, GetLastNthInUpperBound_ExclusiveBound)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10);
+
+	// [..., 60): last < 60 is 50
+	TK::TRangeBound<int> Bound = {60, true};
+	auto [Node, Rank] = List.GetLastNthInUpperBound(0, Bound);
+	ASSERT_NE(Node, nullptr);
+	EXPECT_EQ(Node->Value, 50);
+	EXPECT_EQ(Rank, 5);
+
+	// [..., 60): second-to-last < 60 is 40
+	auto [Node2, Rank2] = List.GetLastNthInUpperBound(1, Bound);
+	ASSERT_NE(Node2, nullptr);
+	EXPECT_EQ(Node2->Value, 40);
+	EXPECT_EQ(Rank2, 4);
+}
+
+TEST(SkipList, GetLastNthInUpperBound_NearSearchPath)
+{
+	IntSkipList List;
+	for (int i = 0; i < 30; ++i)
+		List.Insert(i, i * 5); // 0, 5, 10, ..., 145
+
+	// UpperBound = 122: last <= 122 is 120 → rank 24
+	// ReverseIndex = 3 (< NearSearch=10) → near-search path
+	TK::TRangeBound<int> Bound = {122, false};
+	auto [Node, Rank] = List.GetLastNthInUpperBound(3, Bound);
+	ASSERT_NE(Node, nullptr);
+	// Elements <= 122: ...110(22), 115(23), 120(24). 3rd from last = 105
+	EXPECT_EQ(Node->Value, 105);
+	EXPECT_EQ(Rank, 21);
+}
+
+TEST(SkipList, GetLastNthInUpperBound_MainPath_LargeN)
+{
+	IntSkipList List;
+	for (int i = 0; i < 30; ++i)
+		List.Insert(i, i * 5);
+
+	// UpperBound = 122: last <= 122 is 120 → rank 24
+	// ReverseIndex = 12 (> NearSearch=10) → main At() path
+	TK::TRangeBound<int> Bound = {122, false};
+	auto [Node, Rank] = List.GetLastNthInUpperBound(12, Bound);
+	ASSERT_NE(Node, nullptr);
+	// Elements <= 122: ...60(12), 65(13), ..., 120(24). 12th from last = 60
+	EXPECT_EQ(Node->Value, 60);
+	EXPECT_EQ(Rank, 12);
+}
+
+TEST(SkipList, GetLastNthInUpperBound_RankConsistentWithAt)
+{
+	IntSkipList List;
+	for (int i = 0; i < 40; ++i)
+		List.Insert(i, i * 10);
+
+	TK::TRangeBound<int> Bound = {250, false};
+	for (int n = 0; n < 25; ++n)
+	{
+		auto [Node, Rank] = List.GetLastNthInUpperBound(n, Bound);
+		ASSERT_NE(Node, nullptr) << "n=" << n;
+		auto* NodeByAt = List.At(Rank);
+		EXPECT_EQ(Node, NodeByAt) << "n=" << n;
+	}
+}
+
+TEST(SkipList, GetLastNthInUpperBound_ConsistentWithGetLastInUpperBound)
+{
+	IntSkipList List;
+	for (int i = 0; i < 20; ++i)
+		List.Insert(i, i * 10);
+
+	TK::TRangeBound<int> Bound = {135, false};
+	// GetLastNthInUpperBound(0) should match GetLastInUpperBound
+	auto [NodeNth, RankNth] = List.GetLastNthInUpperBound(0, Bound);
+	auto [NodeLast, RankLast] = List.GetLastInUpperBound(Bound);
+	EXPECT_EQ(NodeNth, NodeLast);
+	EXPECT_EQ(RankNth, RankLast);
 }

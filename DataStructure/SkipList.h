@@ -3,6 +3,8 @@
 #include <random>
 #include <utility>
 
+#include "TinkerAssert.h"
+
 #if __cplusplus >= 202002L || (defined(_MSC_VER) && _MSVC_LANG >= 202002L)
 #include <compare>
 #endif
@@ -185,6 +187,8 @@ namespace TK
 		};
 
 	private:
+		
+		static constexpr SizeType NearSearch = 10;
 
 		struct FLocation
 		{
@@ -228,17 +232,10 @@ namespace TK
 			ListLevels = Other.ListLevels;
 			Size = Other.Size;
 
-			struct FrontNode
-			{
-				NodeType* Node;
-				SizeType HeadOffset;
-			};
-
-			FrontNode InsertFronts[MaxLevel];
+			FPos InsertFronts[MaxLevel];
 			for (int i = 0; i < MaxLevel; ++i)
 			{
-				InsertFronts[i].Node = Head;
-				InsertFronts[i].HeadOffset = 0;
+				InsertFronts[i] = { Head, -1 };
 			}
 
 			NodeType* CopyFronts[MaxLevel];
@@ -248,7 +245,7 @@ namespace TK
 			}
 
 			NodeType* Cursor = Other.Head;
-			for (int Offset = 1; Offset < Other.Size + 1; ++Offset)
+			for (int Index = 0; Index < Other.Size; ++Index)
 			{
 				Cursor = Cursor->GetLink(0)->Next;
 
@@ -267,20 +264,20 @@ namespace TK
 				}
 
 				NodeType* NewNode = NodeType::Create(Cursor->Key, Cursor->Value, CursorHeight);
-
-				if (Offset > 1)
-					NewNode->Prev = InsertFronts[0].Node;
+				NewNode->Prev = InsertFronts[0].Node;
 
 				for (int i = 0; i < CursorHeight; ++i)
 				{
 					NodeLink* PrevLink = InsertFronts[i].Node->GetLink(i);
 					PrevLink->Next = NewNode;
-					PrevLink->Span = Offset - InsertFronts[i].HeadOffset;
+					PrevLink->Span = Index - InsertFronts[i].Index;
 
-					InsertFronts[i].Node = NewNode;
-					InsertFronts[i].HeadOffset = Offset;
+					InsertFronts[i] = { NewNode, Index };
 				}
 			}
+
+			if (NodeType* First = Head->GetNext())
+				First->Prev = nullptr;
 
 			Tail = InsertFronts[0].Node;
 			if (Tail == Head)
@@ -376,36 +373,18 @@ namespace TK
 		template <typename KeyT, typename ValueT>
 		std::pair<const NodeType*, bool> Insert(KeyT&& Key, ValueT&& Value)
 		{
-			NodeType* Frontier[MaxLevel];
-			SizeType FrontierRanks[MaxLevel];
-
-			NodeType* Cur = Head;
-			SizeType CurRank = 0;
+			FPos FrontierNodes[MaxLevel];
+			FPos Cur { Head, -1 };
 
 			for (int i = ListLevels - 1; i >= 0; --i)
 			{
-				while (true)
-				{
-					NodeType* Next = Cur->GetLink(i)->Next;
+				auto [NodeOrFrontier, bFound] = FindEqualOrFrontier(Cur, i, Key, Value);
 
-					if (Next)
-					{
-						auto Order = Comparer(Next, Key, Value);
-						if (Order == 0)
-							return {Next, false};
+				if (bFound)
+					return { NodeOrFrontier.Node, false };
 
-						if (Order < 0)
-						{
-							CurRank += Cur->GetLink(i)->Span;
-							Cur = Next;
-							continue;
-						}
-					}
-
-					Frontier[i] = Cur;
-					FrontierRanks[i] = CurRank;
-					break;
-				}
+				Cur = NodeOrFrontier;
+				FrontierNodes[i] = Cur;
 			}
 
 			int Level = GetRandomLevel();
@@ -413,10 +392,7 @@ namespace TK
 			if (Level > ListLevels)
 			{
 				for (int i = ListLevels; i < Level; ++i)
-				{
-					Frontier[i] = Head;
-					FrontierRanks[i] = 0;
-				}
+					FrontierNodes[i] = { Head, -1 };
 				ListLevels = Level;
 			}
 
@@ -424,29 +400,29 @@ namespace TK
 
 			for (int i = 0; i < Level; ++i)
 			{
-				NodeLink* Link = Frontier[i]->GetLink(i);
+				NodeLink* Link = FrontierNodes[i].Node->GetLink(i);
 				NodeLink* NewLink = NewNode->GetLink(i);
 
 				NewLink->Next = Link->Next;
-				SizeType RankOffset = CurRank - FrontierRanks[i];
+				SizeType IndexOffset = Cur.Index - FrontierNodes[i].Index;
 
 				if (Link->Next)
-					NewLink->Span = Link->Span - RankOffset;
+					NewLink->Span = Link->Span - IndexOffset;
 				else
 					NewLink->Span = 0;
 
 				Link->Next = NewNode;
-				Link->Span = RankOffset + 1;
+				Link->Span = IndexOffset + 1;
 			}
 
 			for (int i = Level; i < ListLevels; ++i)
 			{
-				NodeLink* Link = Frontier[i]->GetLink(i);
+				NodeLink* Link = FrontierNodes[i].Node->GetLink(i);
 				if (Link->Next)
 					Link->Span += 1;
 			}
 
-			NewNode->Prev = Cur == Head ? nullptr : Cur;
+			NewNode->Prev = Cur.Node == Head ? nullptr : Cur.Node;
 			if (NodeType* NextNode = NewNode->GetLink(0)->Next)
 				NextNode->Prev = NewNode;
 			else
@@ -523,7 +499,7 @@ namespace TK
 
 			FPos EraseBegin[MaxLevel] {};
 			FPos EraseUntil[MaxLevel] {};
-			
+
 			FPos From { Head, - 1 };
 			FPos To { nullptr, -1 };
 
@@ -531,12 +507,18 @@ namespace TK
 			{
 				From = FindFrontier(From, i, FromRank);
 				EraseBegin[i] = From;
-				
+
 				To = FindLastInRange(From, i, ToRank);
 				EraseUntil[i] = GetNext(To, i);
 			}
 
 			return EraseCommit(EraseBegin, EraseUntil, To.Index - From.Index, Handler);
+		}
+
+		template <typename EraseHandler = FDefaultEraseHandler>
+		SizeType EraseByRank(SizeType Rank, EraseHandler Handler = FDefaultEraseHandler {})
+		{
+			return EraseByRank(Rank, Rank, Handler);
 		}
 
 		template <typename ValueT>
@@ -625,8 +607,6 @@ namespace TK
 			if (Index >= Size || Index < 0)
 				return nullptr;
 
-			constexpr SizeType NearSearch = 10;
-
 			if (Index < NearSearch)
 			{
 				NodeType* Node = Head->GetNext();
@@ -647,28 +627,17 @@ namespace TK
 				return Node;
 			}
 
-			NodeType* Cur = Head;
-			int Levels = ListLevels - 1;
-			SizeType RemainSteps = Index + 1;
-
-			while (true)
+			FPos Cur { Head, -1 };
+			for (int i = ListLevels - 1; i >= 0; --i)
 			{
-				NodeLink* Link = Cur->GetLink(Levels);
-				NodeType* Next = Link->Next;
+				auto [NextCur, bFound] = FindEqualOrFrontier(Cur, i, Index);
+				if (bFound)
+					return NextCur.Node;
 
-				if (RemainSteps == Link->Span)
-					return Next;
-
-				if (RemainSteps > Link->Span && Next != nullptr)
-				{
-					Cur = Next;
-					RemainSteps -= Link->Span;
-				}
-				else
-				{
-					--Levels;
-				}
+				Cur = NextCur;
 			}
+			TK_ASSERT(false);
+			return nullptr;
 		}
 
 		// Index starts from zero
@@ -677,30 +646,21 @@ namespace TK
 			return At(Index);
 		}
 
-		const NodeType* Find(const K& Key, const V& Value) const
+		// return [node, rank]:
+		// - {node, rank} : node found; rank is its 0-based index in the list
+		// - {nullptr, insertionRank} : not found; insertionRank is the 0-based position
+		//   where the key-value would be inserted if Insert() were called
+		std::pair<const NodeType*, SizeType> Find(const K& Key, const V& Value) const
 		{
-			NodeType* Cur = Head;
+			FPos Cur { Head, -1 };
 			for (int i = ListLevels - 1; i >= 0; --i)
 			{
-				while (true)
-				{
-					NodeType* Next = Cur->GetLink(i)->Next;
-					if (Next)
-					{
-						auto Order = Comparer(Next, Key, Value);
-						if (Order < 0)
-						{
-							Cur = Next;
-							continue;
-						}
-
-						if (Order == 0)
-							return Next;
-					}
-					break;
-				}
+				auto [NextCur, bFound] = FindEqualOrFrontier(Cur, i, Key, Value);
+				if (bFound)
+					return { NextCur.Node, NextCur.Index };
+				Cur = NextCur;
 			}
-			return nullptr;
+			return { nullptr, Cur.Index + 1 };
 		}
 
 		// find first node that satisfies this LowerBound, return this node and it's index (if existed)
@@ -708,7 +668,7 @@ namespace TK
 		{
 			if (IsEmpty() || OutOfLowerBound(Tail->Value, LowerBound))
 				return { nullptr, SizeType(-1) };
-
+			
 			NodeType* Cur = Head;
 			SizeType Index = 0;
 			int Levels = ListLevels - 1;
@@ -732,6 +692,56 @@ namespace TK
 					--Levels;
 				}
 			}
+		}
+		
+		// N is 0-based
+		std::pair<const NodeType*, SizeType> GetNthInLowerBound(SizeType IndexInBound, const TRangeBound<V>& LowerBound) const
+		{
+			if (IsEmpty() || OutOfLowerBound(Tail->Value, LowerBound) || IndexInBound < 0 || IndexInBound > Size - 1)
+				return { nullptr, SizeType(-1) };
+			
+			if (!OutOfLowerBound(GetFirst()->Value, LowerBound))
+				return { At(IndexInBound), IndexInBound };
+			
+			if (IndexInBound < NearSearch)
+			{
+				auto Result = GetFirstInLowerBound(LowerBound);
+				
+				if (Result.second + IndexInBound > Size - 1)
+					return { nullptr, -1 };
+				
+				for (int i = 0; i < IndexInBound; ++i)
+				{
+					Result.first = Result.first->GetNext();
+				}
+				
+				return { Result.first, Result.second + IndexInBound };
+			}
+			
+			FPos Frontier[MaxLevel];
+			FPos Cur { Head, - 1 };
+			
+			for (int i = ListLevels - 1; i >= 0; --i)
+			{
+				Cur = FindFrontier(Cur, i, LowerBound);
+				Frontier[i] = Cur;
+			}
+			
+			SizeType TargetIndex = Frontier[0].Index + 1 + IndexInBound;
+			if (TargetIndex > Size - 1)
+				return { nullptr, -1 };
+			
+			Cur = Frontier[ListLevels - 1];
+			for (int i = ListLevels - 1; i >= 0; --i)
+			{
+				auto [NextCur, bFound] = FindEqualOrFrontier(Cur, i, TargetIndex);
+				if (bFound)
+					return { NextCur.Node, NextCur.Index } ;
+				
+				Cur = NextCur;
+			}
+			TK_ASSERT(false);
+			return { nullptr, -1 };
 		}
 
 		// find last node that satisfies this UpperBound, return this node and it's index (if existed)
@@ -767,42 +777,48 @@ namespace TK
 				}
 			}
 		}
+		
+		
+		std::pair<const NodeType*, SizeType> GetLastNthInUpperBound(SizeType ReverseIndexInBound, 
+			const TRangeBound<V>& UpperBound) const
+		{
+			if (IsEmpty() || 
+				OutOfUpperBound(Head->GetNext()->Value, UpperBound) || 
+				ReverseIndexInBound < 0 || 
+				ReverseIndexInBound > Size - 1)
+			{
+				return { nullptr, SizeType(-1) };			
+			}
+			
+			if (!OutOfUpperBound(Tail->Value, UpperBound))
+			{
+				SizeType Index = Size - 1 - ReverseIndexInBound;
+				return { At(Index), Index };
+			}
+			
+			auto Result = GetLastInUpperBound(UpperBound);
+			if (Result.second < ReverseIndexInBound)
+				return { nullptr, -1 };
+			
+			if (ReverseIndexInBound < NearSearch)
+			{
+				for (int i = 0; i < ReverseIndexInBound; ++i)
+				{
+					Result.first = Result.first->GetPrev();
+				}
+				return { Result.first, Result.second - ReverseIndexInBound };
+			}
+			
+			SizeType Index = Result.second - ReverseIndexInBound;
+			return { At(Index), Index };
+		}
 
 		// return the rank by element's key and value. rank is 0-based.
 		// if such element is not existed, -1 is returned.
 		SizeType GetRank(const K& Key, const V& Value) const
 		{
-			if (IsEmpty())
-				return -1;
-
-			SizeType Rank = -1;
-			NodeType* Cur = Head;
-
-			for (int i = ListLevels - 1; i >= 0; --i)
-			{
-				while (true)
-				{
-					NodeType* Next = Cur->GetLink(i)->Next;
-					if (Next)
-					{
-						int Order = Comparer(Next, Key, Value);
-						if (Order < 0)
-						{
-							Rank += Cur->GetLink(i)->Span;
-							Cur = Next;
-							continue;
-						}
-
-						if (Order == 0)
-						{
-							Rank += Cur->GetLink(i)->Span;
-							return Rank;
-						}
-					}
-					break;
-				}
-			}
-			return -1;
+			auto [Node, Index] = Find(Key, Value);
+			return Node? Index : -1;
 		}
 
 	private:
@@ -948,6 +964,58 @@ namespace TK
 			return { Link->Next,  Pos.Index + Link->Span };
 		}
 
+		// return {node, true} if an equal node is found; {frontier, false} otherwise
+		std::pair<FPos, bool> FindEqualOrFrontier(const FPos& Pos, int Level,
+		                                           const K& Key, const V& Value) const
+		{
+			FPos Cur = Pos;
+			while (true)
+			{
+				FPos Next = GetNext(Cur, Level);
+				if (!Next.Node)
+					return { Cur, false };
+
+				auto Order = Comparer(Next.Node, Key, Value);
+				if (Order < 0)
+					Cur = Next;
+				else
+					return { Order == 0 ? Next : Cur, Order == 0 };
+			}
+		}
+
+		std::pair<FPos, bool> FindEqualOrFrontier(const FPos& Pos, int Level, SizeType Index) const
+		{
+			FPos Cur = Pos;
+			while (true)
+			{
+				FPos Next = GetNext(Cur, Level);
+				if (!Next.Node)
+					return { Cur, false };
+
+				if (Next.Index < Index)
+					Cur = Next;
+				else
+					return { Next.Index == Index ? Next : Cur, Next.Index == Index };
+			}
+		}
+
+		FPos FindFrontier(const FPos& Pos, int Level, const K& Key, const V& Value) const
+		{
+			FPos Cur = Pos;
+			while (true)
+			{
+				FPos Next = GetNext(Cur, Level);
+				if (Next.Node && Comparer(Next.Node, Key, Value) < 0)
+				{
+					Cur = Next;
+				}
+				else
+				{
+					return Cur;
+				}
+			}
+		}
+
 		FPos FindFrontier(const FPos& Pos, int Level, const TRangeBound<V>& LowerBound) const
 		{
 			FPos Cur = Pos;
@@ -964,7 +1032,7 @@ namespace TK
 				}
 			}
 		}
-		
+
 		FPos FindFrontier(const FPos& Pos, int Level, int Rank) const
 		{
 			FPos Cur = Pos;
@@ -980,8 +1048,8 @@ namespace TK
 					return Cur;
 				}
 			}
-		}		
-		
+		}
+
 		FPos FindLastInRange(const FPos& Pos, int Level, const TRangeBound<V>& UpperBound) const
 		{
 			FPos Cur = Pos;
@@ -998,7 +1066,7 @@ namespace TK
 				}
 			}
 		}
-		
+
 		FPos FindLastInRange(const FPos& Pos, int Level, int Rank) const
 		{
 			FPos Cur = Pos;
@@ -1015,7 +1083,7 @@ namespace TK
 				}
 			}
 		}
-		
+
 		template <typename EraseHandler>
 		SizeType EraseCommit(FPos (&EraseBegin)[MaxLevel], FPos (&EraseUntil)[MaxLevel],
 		                     SizeType Removed, EraseHandler& Handler)
