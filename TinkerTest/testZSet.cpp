@@ -1367,3 +1367,96 @@ TEST(ZSet, PopFirst_K2VSync_AllPopped)
 	}
 	EXPECT_EQ(ZS.GetSize(), 0);
 }
+
+// ============================================================================
+// 21. Range views: Reverse / IterateRange / IterateRank
+// ============================================================================
+
+TEST(ZSet, Reverse_RangeFor)
+{
+	IntZSet ZS;
+	for (int i = 0; i < 10; ++i)
+		ZS.Insert(i, i * 10);
+
+	std::vector<int> Values;
+	for (const auto& Node : ZS.Reverse())
+		Values.push_back(Node.Value);
+	EXPECT_EQ(Values, (std::vector<int>{90, 80, 70, 60, 50, 40, 30, 20, 10, 0}));
+}
+
+TEST(ZSet, Reverse_Empty)
+{
+	IntZSet ZS;
+	int Count = 0;
+	for (const auto& Node : ZS.Reverse())
+	{
+		(void)Node;
+		++Count;
+	}
+	EXPECT_EQ(Count, 0);
+}
+
+TEST(ZSet, IterateRange_Partial)
+{
+	IntZSet ZS;
+	for (int i = 0; i < 10; ++i)
+		ZS.Insert(i, i * 10);
+
+	TK::TRange<int> Range = {{25, false}, {65, false}};
+	std::vector<int> Values;
+	for (const auto& Node : ZS.IterateRange(Range))
+		Values.push_back(Node.Value);
+	EXPECT_EQ(Values, (std::vector<int>{30, 40, 50, 60}));
+}
+
+TEST(ZSet, IterateRange_NoMatch)
+{
+	IntZSet ZS;
+	for (int i = 0; i < 5; ++i)
+		ZS.Insert(i, i * 10);
+
+	TK::TRange<int> Range = {{60, false}, {80, false}};
+	int Count = 0;
+	for (const auto& Node : ZS.IterateRange(Range))
+	{
+		(void)Node;
+		++Count;
+	}
+	EXPECT_EQ(Count, 0);
+}
+
+TEST(ZSet, IterateRank_Partial)
+{
+	IntZSet ZS;
+	for (int i = 0; i < 10; ++i)
+		ZS.Insert(i, i * 10);
+
+	std::vector<int> Values;
+	for (const auto& Node : ZS.IterateRank(3, 6))
+		Values.push_back(Node.Value);
+	EXPECT_EQ(Values, (std::vector<int>{30, 40, 50, 60}));
+}
+
+TEST(ZSet, IterateRank_Single)
+{
+	IntZSet ZS;
+	for (int i = 0; i < 5; ++i)
+		ZS.Insert(i, i * 10);
+
+	std::vector<int> Values;
+	for (const auto& Node : ZS.IterateRank(2, 2))
+		Values.push_back(Node.Value);
+	EXPECT_EQ(Values, (std::vector<int>{20}));
+}
+
+TEST(ZSet, IterateRank_Empty)
+{
+	IntZSet ZS;
+	int Count = 0;
+	for (const auto& Node : ZS.IterateRank(0, 5))
+	{
+		(void)Node;
+		++Count;
+	}
+	EXPECT_EQ(Count, 0);
+}

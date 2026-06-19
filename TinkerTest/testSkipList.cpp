@@ -2934,12 +2934,12 @@ TEST(SkipList, RangeFor_IteratorCopyAndAssign)
 	EXPECT_EQ(It2->Value, 10);
 
 	// Copy assignment
-	IntSkipList::const_iterator It3;
+	IntSkipList::FIterator It3;
 	It3 = It1;
 	EXPECT_EQ(It3->Value, 10);
 
 	// Default constructed iterator
-	IntSkipList::const_iterator DefaultIt;
+	IntSkipList::FIterator DefaultIt;
 	IntSkipList EmptyList;
 	EXPECT_EQ(DefaultIt, EmptyList.end());
 }
@@ -4179,3 +4179,162 @@ TEST(SkipList, GetLastNthInUpperBound_ConsistentWithGetLastInUpperBound)
 	EXPECT_EQ(NodeNth, NodeLast);
 	EXPECT_EQ(RankNth, RankLast);
 }
+
+// ============================================================================
+// 24. Range views: Reverse / IterateRange / IterateRank
+// ============================================================================
+
+TEST(SkipList, Reverse_RangeFor)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10);
+
+	std::vector<int> Values;
+	for (const auto& Node : List.Reverse())
+		Values.push_back(Node.Value);
+	EXPECT_EQ(Values, (std::vector<int>{90, 80, 70, 60, 50, 40, 30, 20, 10, 0}));
+}
+
+TEST(SkipList, Reverse_Empty)
+{
+	IntSkipList List;
+	int Count = 0;
+	for (const auto& Node : List.Reverse())
+	{
+		(void)Node;
+		++Count;
+	}
+	EXPECT_EQ(Count, 0);
+}
+
+TEST(SkipList, IterateRange_FullCoverage)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10); // 0, 10, ..., 90
+
+	TK::TRange<int> Range = {{0, false}, {90, false}};
+	std::vector<int> Values;
+	for (const auto& Node : List.IterateRange(Range))
+		Values.push_back(Node.Value);
+	EXPECT_EQ(Values, (std::vector<int>{0, 10, 20, 30, 40, 50, 60, 70, 80, 90}));
+}
+
+TEST(SkipList, IterateRange_Partial)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10);
+
+	TK::TRange<int> Range = {{25, false}, {65, false}};
+	std::vector<int> Values;
+	for (const auto& Node : List.IterateRange(Range))
+		Values.push_back(Node.Value);
+	EXPECT_EQ(Values, (std::vector<int>{30, 40, 50, 60}));
+}
+
+TEST(SkipList, IterateRange_ExclusiveBounds)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10);
+
+	TK::TRange<int> Range = {{30, true}, {60, true}}; // (30, 60)
+	std::vector<int> Values;
+	for (const auto& Node : List.IterateRange(Range))
+		Values.push_back(Node.Value);
+	EXPECT_EQ(Values, (std::vector<int>{40, 50}));
+}
+
+TEST(SkipList, IterateRange_NoMatch)
+{
+	IntSkipList List;
+	for (int i = 0; i < 5; ++i)
+		List.Insert(i, i * 10);
+
+	TK::TRange<int> Range = {{60, false}, {80, false}}; // all values are 0..40
+	int Count = 0;
+	for (const auto& Node : List.IterateRange(Range))
+	{
+		(void)Node;
+		++Count;
+	}
+	EXPECT_EQ(Count, 0);
+}
+
+TEST(SkipList, IterateRange_Empty)
+{
+	IntSkipList List;
+	TK::TRange<int> Range = {{0, false}, {100, false}};
+	int Count = 0;
+	for (const auto& Node : List.IterateRange(Range))
+	{
+		(void)Node;
+		++Count;
+	}
+	EXPECT_EQ(Count, 0);
+}
+
+TEST(SkipList, IterateRank_FullRange)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10);
+
+	std::vector<int> Values;
+	for (const auto& Node : List.IterateRank(0, 9))
+		Values.push_back(Node.Value);
+	EXPECT_EQ(Values, (std::vector<int>{0, 10, 20, 30, 40, 50, 60, 70, 80, 90}));
+}
+
+TEST(SkipList, IterateRank_Partial)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10);
+
+	std::vector<int> Values;
+	for (const auto& Node : List.IterateRank(3, 6))
+		Values.push_back(Node.Value);
+	EXPECT_EQ(Values, (std::vector<int>{30, 40, 50, 60}));
+}
+
+TEST(SkipList, IterateRank_Single)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10);
+
+	std::vector<int> Values;
+	for (const auto& Node : List.IterateRank(5, 5))
+		Values.push_back(Node.Value);
+	EXPECT_EQ(Values, (std::vector<int>{50}));
+}
+
+TEST(SkipList, IterateRank_ToEnd)
+{
+	IntSkipList List;
+	for (int i = 0; i < 5; ++i)
+		List.Insert(i, i * 10);
+
+	std::vector<int> Values;
+	for (const auto& Node : List.IterateRank(3, 9)) // ToRank > last → clamped
+		Values.push_back(Node.Value);
+	// At(10) returns nullptr → end(), so iteration stops after last element
+	EXPECT_EQ(Values, (std::vector<int>{30, 40}));
+}
+
+TEST(SkipList, IterateRank_Empty)
+{
+	IntSkipList List;
+	int Count = 0;
+	for (const auto& Node : List.IterateRank(0, 5))
+	{
+		(void)Node;
+		++Count;
+	}
+	// At(0) returns nullptr → begin == end
+	EXPECT_EQ(Count, 0);
+}
+

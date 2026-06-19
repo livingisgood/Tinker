@@ -22,9 +22,11 @@ namespace TK
 		using NodeType = typename ListType::NodeType;
 		using SizeType = typename ListType::SizeType;
 		using MapType = std::unordered_map<K, NodeType const*>;
-
-		using const_iterator = typename ListType::FIterator;
-		using const_reverse_iterator = typename ListType::FReverseIterator;
+		using FIterator = typename ListType::FIterator;
+		using FReverseIterator = typename ListType::FReverseIterator;
+		using FRankRangeView = typename ListType::FRankRangeView;
+		using FValueRangeView = typename ListType::FValueRangeView;
+		using FReverseView = typename ListType::FReverseView;
 		
 	private:
 		
@@ -97,15 +99,19 @@ namespace TK
 		const NodeType* GetFirst() const { return SortedVList.GetFirst(); }
 		const NodeType* GetLast() const { return SortedVList.GetLast(); }
 
-		const_iterator begin()  const { return const_iterator(GetFirst()); }
-		const_iterator end()    const { return const_iterator(nullptr); }
-		const_iterator cbegin() const { return begin(); }
-		const_iterator cend()   const { return end(); }
+		FIterator begin()  const { return FIterator(GetFirst()); }
+		FIterator end()    const { return FIterator(nullptr); }
+		FIterator cbegin() const { return begin(); }
+		FIterator cend()   const { return end(); }
 
-		const_reverse_iterator rbegin()  const { return const_reverse_iterator(GetLast()); }
-		const_reverse_iterator rend()    const { return const_reverse_iterator(nullptr); }
-		const_reverse_iterator crbegin() const { return rbegin(); }
-		const_reverse_iterator crend()   const { return rend(); }
+		FReverseIterator rbegin()  const { return FReverseIterator(GetLast()); }
+		FReverseIterator rend()    const { return FReverseIterator(nullptr); }
+		FReverseIterator crbegin() const { return rbegin(); }
+		FReverseIterator crend()   const { return rend(); }
+
+		FReverseView    Reverse()                              const { return SortedVList.Reverse(); }
+		FValueRangeView IterateRange(const TRange<V>& InRange) const { return SortedVList.IterateRange(InRange); }
+		FRankRangeView  IterateRank(SizeType From, SizeType To) const { return SortedVList.IterateRank(From, To); }
 
 		const NodeType* FindByKey(const K& Key) const { auto it = K2V.find(Key); return it == K2V.end()? nullptr : it->second; }
 		bool Contains(const K& Key) const { return K2V.find(Key) != K2V.end(); }
@@ -126,10 +132,21 @@ namespace TK
 		{
 			return SortedVList.GetFirstInLowerBound(LowerBound);
 		}
+		
+		std::pair<const NodeType*, SizeType> GetNthInLowerBound(SizeType IndexInBound, const TRangeBound<V>& LowerBound)
+		{
+			return SortedVList.GetNthInLowerBound(IndexInBound, LowerBound);
+		}
 
 		std::pair<const NodeType*, SizeType> GetLastInUpperBound(const TRangeBound<V>& UpperBound) const
 		{
 			return SortedVList.GetLastInUpperBound(UpperBound);
+		}
+		
+		std::pair<const NodeType*, SizeType> GetLastNthInUpperBound(SizeType ReverseIndexInBound,
+			const TRangeBound<V>& UpperBound) const
+		{
+			return SortedVList.GetLastNthInUpperBound(UpperBound);
 		}
 
 		bool ContainsAnyInRange(const TRange<V>& ValueRange) const { return SortedVList.ContainsAnyInRange(ValueRange); }
