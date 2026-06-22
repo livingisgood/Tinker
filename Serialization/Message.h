@@ -60,7 +60,7 @@ namespace TK
 
 		void ClearContent()
 		{
-			ShrinkTo(sizeof(FHeaderSizeType));
+			ShrinkTo(sizeof(FHeader));
 		}
 
 		FHeader* GetHeader() { return reinterpret_cast<FHeader*>(GetBuffer()); }

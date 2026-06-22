@@ -60,3 +60,33 @@ void Test()
     Reader & Copy; // load data from Reader, could call Load(Reader, Copy) instead      
 }
 
+
+Cross-platform notes
+--------------------
+
+The serialized bytes are the raw in-memory representation of each value
+(no endianness conversion is applied). For this to be safe across machines,
+the following assumptions must hold between the writing side and the
+reading side:
+
+1. Integer width and signedness must match.
+   Prefer fixed-width integer types (std::int32_t, std::uint64_t, ...) over
+   the platform-dependent int / long / size_t, so that both sides agree on
+   the exact number of bytes written.
+
+2. Floating-point types use their native memory layout.
+   IsBitwisePackable<float> / IsBitwisePackable<double> are guarded by a
+   sizeof check (4 / 8 bytes respectively) and fail to compile on platforms
+   that do not meet it, forcing the user to provide a custom Save/Load.
+   Note: this only verifies the width, not that the layout is IEEE-754.
+   Every mainstream platform today provides IEC-559 floats, so in practice
+   this is fine.
+
+3. Both sides must share the same byte order.
+   All mainstream targets (x86 / x64, ARM in little-endian mode, Apple
+   Silicon, AWS Graviton, etc.) are little-endian, so communication among
+   PC, Mac, iOS, Android and common cloud hosts works out of the box.
+   Big-endian machines (e.g. IBM z, classic MIPS routers, some PowerPC /
+   SPARC systems) are rare today; if you ever need to talk to one, do the
+   endian conversion on the caller side before pushing into the stream.
+
