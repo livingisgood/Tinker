@@ -75,14 +75,12 @@ namespace TK
 
 		FLink* GetLink(int Level)
 		{
-			auto* base = reinterpret_cast<char*>(this) + offsetof(TSkipNode, Links);
-			return reinterpret_cast<FLink*>(base) + Level;
+			return &Links[Level];
 		}
 
 		const FLink* GetLink(int Level) const
 		{
-			auto* base = reinterpret_cast<const char*>(this) + offsetof(TSkipNode, Links);
-			return reinterpret_cast<const FLink*>(base) + Level;
+			return &Links[Level];
 		}
 
 		TSkipNode* GetPrev() const { return Prev; }
