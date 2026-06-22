@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="bench">
+      <UniqueIdentifier>{a1a1a1a1-1111-1111-1111-111111111111}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="adapters">
+      <UniqueIdentifier>{b2b2b2b2-2222-2222-2222-222222222222}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third_party">
+      <UniqueIdentifier>{c3c3c3c3-3333-3333-3333-333333333333}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third_party\benchmark">
+      <UniqueIdentifier>{d4d4d4d4-4444-4444-4444-444444444444}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="third_party\disque">
+      <UniqueIdentifier>{e5e5e5e5-5555-5555-5555-555555555555}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="bench_main.cpp"><Filter>bench</Filter></ClCompile>
+    <ClCompile Include="bench_insert.cpp"><Filter>bench</Filter></ClCompile>
+    <ClCompile Include="bench_rank.cpp"><Filter>bench</Filter></ClCompile>
+    <ClCompile Include="bench_range.cpp"><Filter>bench</Filter></ClCompile>
+    <ClCompile Include="bench_erase.cpp"><Filter>bench</Filter></ClCompile>
+    <ClInclude Include="bench_common.h"><Filter>bench</Filter></ClInclude>
+    <ClCompile Include="adapters\DisqueShim.cpp"><Filter>adapters</Filter></ClCompile>
+    <ClInclude Include="adapters\DisqueZSet.h"><Filter>adapters</Filter></ClInclude>
+    <ClCompile Include="third_party\disque\skiplist.c"><Filter>third_party\disque</Filter></ClCompile>
+    <ClInclude Include="third_party\disque\skiplist.h"><Filter>third_party\disque</Filter></ClInclude>
+    <ClCompile Include="third_party\benchmark\src\benchmark.cc"><Filter>third_party\benchmark</Filter></ClCompile>
+    <ClCompile Include="third_party\benchmark\src\benchmark_api_internal.cc"><Filter>third_party\benchmark</Filter></ClCompile>
+    <ClCompile Include="third_party\benchmark\src\benchmark_name.cc"><Filter>third_party\benchmark</Filter></ClCompile>
+    <ClCompile Include="third_party\benchmark\src\benchmark_register.cc"><Filter>third_party\benchmark</Filter></ClCompile>
+    <ClCompile Include="third_party\benchmark\src\benchmark_runner.cc"><Filter>third_party\benchmark</Filter></ClCompile>
+    <ClCompile Include="third_party\benchmark\src\check.cc"><Filter>third_party\benchmark</Filter></ClCompile>
+    <ClCompile Include="third_party\benchmark\src\colorprint.cc"><Filter>third_party\benchmark</Filter></ClCompile>
+    <ClCompile Include="third_party\benchmark\src\commandlineflags.cc"><Filter>third_party\benchmark</Filter></ClCompile>
+    <ClCompile Include="third_party\benchmark\src\complexity.cc"><Filter>third_party\benchmark</Filter></ClCompile>
+    <ClCompile Include="third_party\benchmark\src\console_reporter.cc"><Filter>third_party\benchmark</Filter></ClCompile>
+    <ClCompile Include="third_party\benchmark\src\counter.cc"><Filter>third_party\benchmark</Filter></ClCompile>
+    <ClCompile Include="third_party\benchmark\src\csv_reporter.cc"><Filter>third_party\benchmark</Filter></ClCompile>
+    <ClCompile Include="third_party\benchmark\src\json_reporter.cc"><Filter>third_party\benchmark</Filter></ClCompile>
+    <ClCompile Include="third_party\benchmark\src\perf_counters.cc"><Filter>third_party\benchmark</Filter></ClCompile>
+    <ClCompile Include="third_party\benchmark\src\reporter.cc"><Filter>third_party\benchmark</Filter></ClCompile>
+    <ClCompile Include="third_party\benchmark\src\statistics.cc"><Filter>third_party\benchmark</Filter></ClCompile>
+    <ClCompile Include="third_party\benchmark\src\string_util.cc"><Filter>third_party\benchmark</Filter></ClCompile>
+    <ClCompile Include="third_party\benchmark\src\sysinfo.cc"><Filter>third_party\benchmark</Filter></ClCompile>
+    <ClCompile Include="third_party\benchmark\src\timers.cc"><Filter>third_party\benchmark</Filter></ClCompile>
+  </ItemGroup>
+</Project>

@@ -4,6 +4,8 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "Tinker", "Tinker.vcxproj", 
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TinkerTest", "TinkerTest\TinkerTest.vcxproj", "{F5233826-88DA-4FE1-A0FF-1E8C9B19D185}"
 EndProject
+Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "TinkerBench", "TinkerBench\TinkerBench.vcxproj", "{B7C2A1F0-3D4E-4B5A-9F6C-1A2B3C4D5E6F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Win32 = Debug|Win32
@@ -28,5 +30,13 @@ Global
 		{F5233826-88DA-4FE1-A0FF-1E8C9B19D185}.Release|Win32.Build.0 = Release|Win32
 		{F5233826-88DA-4FE1-A0FF-1E8C9B19D185}.Release|x64.ActiveCfg = Release|x64
 		{F5233826-88DA-4FE1-A0FF-1E8C9B19D185}.Release|x64.Build.0 = Release|x64
+		{B7C2A1F0-3D4E-4B5A-9F6C-1A2B3C4D5E6F}.Debug|Win32.ActiveCfg = Debug|Win32
+		{B7C2A1F0-3D4E-4B5A-9F6C-1A2B3C4D5E6F}.Debug|Win32.Build.0 = Debug|Win32
+		{B7C2A1F0-3D4E-4B5A-9F6C-1A2B3C4D5E6F}.Debug|x64.ActiveCfg = Debug|x64
+		{B7C2A1F0-3D4E-4B5A-9F6C-1A2B3C4D5E6F}.Debug|x64.Build.0 = Debug|x64
+		{B7C2A1F0-3D4E-4B5A-9F6C-1A2B3C4D5E6F}.Release|Win32.ActiveCfg = Release|Win32
+		{B7C2A1F0-3D4E-4B5A-9F6C-1A2B3C4D5E6F}.Release|Win32.Build.0 = Release|Win32
+		{B7C2A1F0-3D4E-4B5A-9F6C-1A2B3C4D5E6F}.Release|x64.ActiveCfg = Release|x64
+		{B7C2A1F0-3D4E-4B5A-9F6C-1A2B3C4D5E6F}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 EndGlobal
