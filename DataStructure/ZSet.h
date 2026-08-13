@@ -146,7 +146,7 @@ namespace TK
 		std::pair<const NodeType*, SizeType> GetLastNthInUpperBound(SizeType ReverseIndexInBound,
 			const TRangeBound<V>& UpperBound) const
 		{
-			return SortedVList.GetLastNthInUpperBound(UpperBound);
+			return SortedVList.GetLastNthInUpperBound(ReverseIndexInBound, UpperBound);
 		}
 
 		bool ContainsAnyInRange(const TRange<V>& ValueRange) const { return SortedVList.ContainsAnyInRange(ValueRange); }

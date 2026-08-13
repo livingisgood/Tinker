@@ -36,6 +36,7 @@
   <ImportGroup Label="PropertySheets" />
   <PropertyGroup Label="UserMacros" />
   <ItemGroup>
+    <ClCompile Include="testHungarianSolver.cpp" />
     <ClCompile Include="testSerialize.cpp" />
     <ClCompile Include="testSkipList.cpp" />
     <ClCompile Include="testZSet.cpp" />

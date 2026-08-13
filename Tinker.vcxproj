@@ -167,6 +167,7 @@
     <ClCompile Include="Tinker.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="Algorithm\HungarianSolver.h" />
     <ClInclude Include="DataStructure\SkipList.h" />
     <ClInclude Include="DataStructure\ZSet.h" />
     <ClInclude Include="Serialization\LargeObject.h" />

@@ -848,7 +848,10 @@ namespace TK
 
 			auto Order = ValueComparer(CurrentValue, NewValue);
 			if (Order == 0)
+			{
+				Location.Node->Value = std::forward<ValueT>(NewValue);	
 				return Location.Node;
+			}
 
 			if (Order < 0)
 			{
@@ -1168,7 +1171,7 @@ namespace TK
 				EraseUntil[0].Node->Prev = EraseBegin[0].Node == Head ? nullptr : EraseBegin[0].Node;
 
 			if (EraseUntil[0].Node == nullptr)
-				Tail = EraseBegin[0].Node;
+				Tail = EraseBegin[0].Node == Head? nullptr : EraseBegin[0].Node;
 
 			int Height = ListLevels;
 			for (int i = ListLevels - 1; i >= 0; --i)
