@@ -223,8 +223,18 @@ namespace TK
 		}
 
 		Data.clear();
-		Data.append(static_cast<const CharType*>(Stream.GetReadPos()), CharsNum);
-		Stream.Advance(CharsNum * sizeof(CharType));
+		if constexpr (alignof(CharType) == 1)
+		{
+			Data.append(static_cast<const CharType*>(Stream.GetReadPos()), CharsNum);
+			Stream.Advance(CharsNum * sizeof(CharType));
+		}
+		else
+		{
+			// the read position may not satisfy alignof(CharType); copying through
+			// Pop(memcpy) is safe because memcpy has no alignment requirement.
+			Data.resize(CharsNum);
+			Stream.Pop(Data.data(), CharsNum * sizeof(CharType));
+		}
 	}
 
 	template<typename T>
@@ -268,49 +278,6 @@ namespace TK
 				else
 				{
 					break;
-				}
-			}
-		}
-	}
-
-	template<typename T>
-	void Load(FMemReader& Stream, std::vector<T>& Data)
-	{
-		if (!Stream.IsValidInput())
-			return;
-
-		std::uint32_t Num = Stream.Pop<std::uint32_t>();
-		Data.clear();
-
-		if constexpr (IsBitwisePackable<T>)
-		{
-			if (!Stream.EnsureEnoughBytes(Num * sizeof(T)))
-			{
-				Stream.MarkInputInvalid();
-				TK_ASSERT(false);
-				return;
-			}
-
-			const T* Start = static_cast<const T*>(Stream.GetReadPos());
-			const T* End = Start + Num;
-			
-			Data.insert(Data.end(), Start, End);
-			Stream.Advance(Num * sizeof(T));
-		}
-		else
-		{
-			for (std::uint32_t i = 0; i < Num; ++i)
-			{
-				T Item {};
-				Load(Stream, Item);
-
-				if (Stream.IsValidInput())
-				{
-					Data.push_back(Item);
-				}
-				else
-				{
-					return;
 				}
 			}
 		}
