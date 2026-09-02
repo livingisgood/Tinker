@@ -637,18 +637,32 @@ namespace TK
 
 			FIterator begin() const
 			{
-				auto [Node, _] = List->GetFirstInLowerBound(Range.LowerBound);
-				if (!Node || List->OutOfUpperBound(Node->Value, Range.UpperBound))
+				if (IsEmptyRange())
 					return FIterator(nullptr);
-				return FIterator(Node);
+				auto [Node, _] = List->GetFirstInLowerBound(Range.LowerBound);
+				if (Node && List->OutOfUpperBound(Node->Value, Range.UpperBound))
+					return end(); // no element satisfies both bounds: begin == end, range-for is a no-op
+				return FIterator(Node); // Node==nullptr => end() is nullptr too, naturally equal
 			}
 
 			FIterator end() const
 			{
-				auto [Node, _] = List->GetLastInUpperBound(Range.UpperBound);
-				if (!Node)
+				if (IsEmptyRange())
 					return FIterator(nullptr);
-				return FIterator(Node->GetNext());
+				// first node beyond the upper bound == lower_bound(upper, flipped exclusivity)
+				auto [Node, _] = List->GetFirstInLowerBound(
+					{ Range.UpperBound.Value, !Range.UpperBound.bExclusive });
+				return FIterator(Node);
+			}
+
+		private:
+			// A-priori empty range: lower > upper, or equal with an open bound.
+			// Pure value comparisons, no list traversal.
+			bool IsEmptyRange() const
+			{
+				auto Order = List->ValueComparer(Range.LowerBound.Value, Range.UpperBound.Value);
+				return Order > 0 ||
+					(Order == 0 && (Range.LowerBound.bExclusive || Range.UpperBound.bExclusive));
 			}
 		};
 
@@ -660,14 +674,28 @@ namespace TK
 
 			FIterator begin() const
 			{
-				return FIterator(List->At(FromRank));
+				if (IsEmptyRange())
+					return FIterator(nullptr);
+				// clamp negative FromRank to 0 (the rest of the range is still
+				// valid), mirroring EraseByRank's clamping.
+				return FIterator(List->At(FromRank < 0 ? 0 : FromRank));
 			}
 
 			FIterator end() const
 			{
+				if (IsEmptyRange())
+					return FIterator(nullptr);
 				if (ToRank >= List->GetSize() - 1)
 					return FIterator(nullptr);
 				return FIterator(List->At(ToRank + 1));
+			}
+
+		private:
+			// A-priori empty range: no overlap with [0, Size-1].
+			// Pure integer comparisons, zero list traversal.
+			bool IsEmptyRange() const
+			{
+				return FromRank > ToRank || ToRank < 0 || FromRank >= List->GetSize();
 			}
 		};
 

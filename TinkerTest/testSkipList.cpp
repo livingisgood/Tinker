@@ -4338,3 +4338,165 @@ TEST(SkipList, IterateRank_Empty)
 	EXPECT_EQ(Count, 0);
 }
 
+// ============================================================================
+// RangeView begin/end consistency edge cases.
+// The contract: an empty range must yield begin() == end() so range-for
+// never dereferences. The cases below used to break it (UB on *begin()).
+// ============================================================================
+
+// Nodes 1 and 10, range [2, 9]: each bound alone matches a node but the
+// intersection is empty. begin() must equal end() (both point at node 10).
+TEST(SkipList, IterateRange_DisjointIntersection)
+{
+	IntSkipList List;
+	List.Insert(1, 1);
+	List.Insert(2, 10);
+
+	TK::TRange<int> Range = {{2, false}, {9, false}};
+	auto View = List.IterateRange(Range);
+	EXPECT_TRUE(View.begin() == View.end());
+
+	int Count = 0;
+	for (const auto& Node : View)
+	{
+		(void)Node;
+		++Count;
+	}
+	EXPECT_EQ(Count, 0);
+}
+
+// A-priori invalid range: lower > upper. No lookup should be needed;
+// begin() == end() == nullptr.
+TEST(SkipList, IterateRange_ReversedBounds)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10);
+
+	TK::TRange<int> Range = {{65, false}, {25, false}};
+	auto View = List.IterateRange(Range);
+	EXPECT_TRUE(View.begin() == View.end());
+
+	int Count = 0;
+	for (const auto& Node : View)
+	{
+		(void)Node;
+		++Count;
+	}
+	EXPECT_EQ(Count, 0);
+}
+
+// Lower == Upper with any open bound is an empty range: [x,x), (x,x], (x,x).
+TEST(SkipList, IterateRange_EqualOpenBounds)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10);
+
+	const int Value = 50;
+	for (int Mask = 1; Mask <= 3; ++Mask) // bit0: lower open, bit1: upper open
+	{
+		TK::TRange<int> Range = {{Value, (Mask & 1) != 0}, {Value, (Mask & 2) != 0}};
+		auto View = List.IterateRange(Range);
+		EXPECT_TRUE(View.begin() == View.end()) << "mask=" << Mask;
+
+		int Count = 0;
+		for (const auto& Node : View)
+		{
+			(void)Node;
+			++Count;
+		}
+		EXPECT_EQ(Count, 0) << "mask=" << Mask;
+	}
+}
+
+// Range entirely beyond both ends of the list: below-min and above-max.
+TEST(SkipList, IterateRange_CompletelyOutside)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10); // 0..90
+
+	TK::TRange<int> Below = {{-100, false}, {-10, false}};
+	auto BelowView = List.IterateRange(Below);
+	EXPECT_TRUE(BelowView.begin() == BelowView.end());
+
+	TK::TRange<int> Above = {{100, false}, {200, false}};
+	auto AboveView = List.IterateRange(Above);
+	EXPECT_TRUE(AboveView.begin() == AboveView.end());
+}
+
+// From > To: reversed rank range. Used to make begin()/end() never meet
+// (iteration ran off the list end → UB). Must be an empty range now.
+TEST(SkipList, IterateRank_Reversed)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10);
+
+	auto View = List.IterateRank(6, 3);
+	EXPECT_TRUE(View.begin() == View.end());
+
+	int Count = 0;
+	for (const auto& Node : View)
+	{
+		(void)Node;
+		++Count;
+	}
+	EXPECT_EQ(Count, 0);
+}
+
+// ToRank < 0: the range has no overlap with [0, Size-1] → empty, zero lookups.
+TEST(SkipList, IterateRank_NegativeTo)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10);
+
+	auto View = List.IterateRank(-5, -1);
+	EXPECT_TRUE(View.begin() == View.end());
+
+	int Count = 0;
+	for (const auto& Node : View)
+	{
+		(void)Node;
+		++Count;
+	}
+	EXPECT_EQ(Count, 0);
+}
+
+// FromRank >= Size: the range starts beyond the last element → empty.
+TEST(SkipList, IterateRank_FromBeyondSize)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10);
+
+	auto View = List.IterateRank(15, 20);
+	EXPECT_TRUE(View.begin() == View.end());
+
+	int Count = 0;
+	for (const auto& Node : View)
+	{
+		(void)Node;
+		++Count;
+	}
+	EXPECT_EQ(Count, 0);
+}
+
+// FromRank < 0 with a valid ToRank: clamped to rank 0 (mirrors EraseByRank).
+TEST(SkipList, IterateRank_NegativeFromClamped)
+{
+	IntSkipList List;
+	for (int i = 0; i < 10; ++i)
+		List.Insert(i, i * 10);
+
+	auto View = List.IterateRank(-3, 4);
+	EXPECT_TRUE(View.begin() != View.end());
+
+	std::vector<int> Values;
+	for (const auto& Node : View)
+		Values.push_back(Node.Value);
+	EXPECT_EQ(Values, (std::vector<int>{0, 10, 20, 30, 40}));
+}
+
