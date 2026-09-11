@@ -113,7 +113,7 @@ namespace TK
                     for (int Worker = 1; Worker <= WorkersNum; ++Worker)
                     {
                         // for every worker j that is not in Z2
-                        if (InPathW[Worker] == Zero)
+                        if (InPathW[Worker] == 0)
                         {
                             CostType CurDelta = GetCost(NewJob, Worker) - WeightJ[NewJob] - WeightW[Worker];
 
