@@ -11,6 +11,50 @@
 
 using IntZSet = TK::TZSet<int, int>;
 
+TEST(ZSet, DecrementEndIterators)
+{
+	IntZSet ZS;
+	for (int i = 1; i <= 3; ++i)
+		ZS.Insert(i, i * 10);
+	const auto& ConstZS = ZS;
+	auto It = ConstZS.cend();
+	EXPECT_TRUE(It-- == ConstZS.cend());
+	EXPECT_EQ(It->Value, 30);
+	EXPECT_EQ((--It)->Value, 20);
+	EXPECT_EQ(std::prev(ConstZS.cend(), 3), ConstZS.cbegin());
+	EXPECT_TRUE(++std::prev(ConstZS.cend()) == ConstZS.cend());
+	EXPECT_EQ(std::make_reverse_iterator(ZS.end())->Value, 30);
+
+	auto ReverseIt = ConstZS.crend();
+	EXPECT_TRUE(ReverseIt-- == ConstZS.crend());
+	EXPECT_EQ(ReverseIt->Value, 10);
+	EXPECT_EQ((--ReverseIt)->Value, 20);
+	EXPECT_EQ(std::prev(ConstZS.crend(), 3), ConstZS.crbegin());
+	EXPECT_EQ(std::prev(ZS.Reverse().end())->Value, 10);
+	EXPECT_EQ(std::prev(ZS.IterateRange({{10, false}, {20, false}}).end())->Value, 20);
+	EXPECT_EQ(std::prev(ZS.IterateRange({{20, false}, {30, false}}).end())->Value, 30);
+	EXPECT_EQ(std::prev(ZS.IterateRank(0, 1).end())->Value, 20);
+	EXPECT_EQ(std::prev(ZS.IterateRank(1, 2).end())->Value, 30);
+}
+
+TEST(ZSet, SavedEndIteratorsTrackCurrentEndpoints)
+{
+	IntZSet ZS;
+	auto End = ZS.end();
+	auto ReverseEnd = ZS.rend();
+	ZS.Insert(2, 20);
+	EXPECT_EQ(std::prev(End)->Value, 20);
+	EXPECT_EQ(std::prev(ReverseEnd)->Value, 20);
+	ZS.Insert(1, 10);
+	ZS.Insert(3, 30);
+	EXPECT_EQ(std::prev(End)->Value, 30);
+	EXPECT_EQ(std::prev(ReverseEnd)->Value, 10);
+	ZS.Erase(1);
+	ZS.Erase(3);
+	EXPECT_EQ(std::prev(End)->Value, 20);
+	EXPECT_EQ(std::prev(ReverseEnd)->Value, 20);
+}
+
 struct FReverseValueComparer
 {
 	int operator()(const int& A, const int& B) const
@@ -624,6 +668,31 @@ TEST(ZSet, GetCountInRange)
 
 	TK::TRange<int> Range = {{25, false}, {65, false}};
 	EXPECT_EQ(ZS.GetCountInRange(Range), 4); // 30, 40, 50, 60
+}
+
+TEST(ZSet, GetCountInRange_EmptyRangeRegression)
+{
+	IntZSet ZS;
+	ZS.Insert(1, 10);
+	ZS.Insert(2, 20);
+	ZS.Insert(3, 20);
+	ZS.Insert(4, 30);
+	ZS.Insert(5, 40);
+
+	for (int Mask = 0; Mask < 4; ++Mask)
+	{
+		const bool LowerOpen = (Mask & 1) != 0;
+		const bool UpperOpen = (Mask & 2) != 0;
+		TK::TRange<int> Reversed = {{40, LowerOpen}, {10, UpperOpen}};
+		EXPECT_EQ(ZS.GetCountInRange(Reversed), 0) << "mask=" << Mask;
+		EXPECT_FALSE(ZS.ContainsAnyInRange(Reversed));
+
+		TK::TRange<int> Equal = {{20, LowerOpen}, {20, UpperOpen}};
+		EXPECT_EQ(ZS.GetCountInRange(Equal), Mask == 0 ? 2 : 0) << "mask=" << Mask;
+		EXPECT_EQ(ZS.ContainsAnyInRange(Equal), Mask == 0);
+	}
+	TK::TRange<int> Gap = {{21, false}, {29, false}};
+	EXPECT_EQ(ZS.GetCountInRange(Gap), 0);
 }
 
 TEST(ZSet, ContainsAnyInRange)

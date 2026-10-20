@@ -5,10 +5,131 @@
 #include <random>
 #include <set>
 #include <numeric>
+#include <cstdint>
+
+TEST(SkipList, DecrementEndIterators)
+{
+	TK::TSkipList<int, int> List;
+	for (int i = 1; i <= 3; ++i)
+		List.Insert(i, i * 10);
+	const auto& ConstList = List;
+	auto It = ConstList.cend();
+	EXPECT_TRUE(It-- == ConstList.cend());
+	EXPECT_EQ(It->Value, 30);
+	EXPECT_EQ((--It)->Value, 20);
+	EXPECT_EQ(std::prev(ConstList.cend(), 3), ConstList.cbegin());
+	EXPECT_TRUE(++std::prev(ConstList.cend()) == ConstList.cend());
+	std::vector<int> Backward;
+	for (auto Cursor = List.end(); Cursor != List.begin();)
+		Backward.push_back((--Cursor)->Value);
+	EXPECT_EQ(Backward, (std::vector<int>{30, 20, 10}));
+	EXPECT_EQ(std::make_reverse_iterator(List.end())->Value, 30);
+
+	auto ReverseIt = ConstList.crend();
+	EXPECT_TRUE(ReverseIt-- == ConstList.crend());
+	EXPECT_EQ(ReverseIt->Value, 10);
+	EXPECT_EQ((--ReverseIt)->Value, 20);
+	EXPECT_EQ(std::prev(ConstList.crend(), 3), ConstList.crbegin());
+	EXPECT_EQ(std::prev(List.Reverse().end())->Value, 10);
+	EXPECT_EQ(std::prev(List.IterateRange({{10, false}, {20, false}}).end())->Value, 20);
+	EXPECT_EQ(std::prev(List.IterateRange({{20, false}, {30, false}}).end())->Value, 30);
+	EXPECT_EQ(std::prev(List.IterateRank(0, 1).end())->Value, 20);
+	EXPECT_EQ(std::prev(List.IterateRank(1, 2).end())->Value, 30);
+}
+
+TEST(SkipList, SavedEndIteratorsTrackCurrentEndpoints)
+{
+	TK::TSkipList<int, int> List;
+	auto End = List.end();
+	auto ReverseEnd = List.rend();
+	List.Insert(2, 20);
+	EXPECT_EQ(std::prev(End)->Value, 20);
+	EXPECT_EQ(std::prev(ReverseEnd)->Value, 20);
+	List.Insert(1, 10);
+	List.Insert(3, 30);
+	EXPECT_EQ(std::prev(End)->Value, 30);
+	EXPECT_EQ(std::prev(ReverseEnd)->Value, 10);
+	List.Erase(1, 10);
+	List.Erase(3, 30);
+	EXPECT_EQ(std::prev(End)->Value, 20);
+	EXPECT_EQ(std::prev(ReverseEnd)->Value, 20);
+}
 
 // ============================================================================
 // Test Helpers
 // ============================================================================
+
+template <std::size_t Alignment>
+struct alignas(Alignment) FAlignedSkipListItem
+{
+	int Data;
+	explicit FAlignedSkipListItem(int InData = 0) : Data(InData) {}
+	bool operator<(const FAlignedSkipListItem& Other) const { return Data < Other.Data; }
+};
+
+template <typename ListType>
+void VerifyAlignedSkipListNodes(const ListType& List)
+{
+	using NodeType = typename ListType::NodeType;
+	int Count = 0;
+	for (const auto& Node : List)
+	{
+		EXPECT_EQ(reinterpret_cast<std::uintptr_t>(&Node) % alignof(NodeType), 0u);
+		EXPECT_EQ(reinterpret_cast<std::uintptr_t>(&Node.Key) % alignof(decltype(Node.Key)), 0u);
+		EXPECT_EQ(reinterpret_cast<std::uintptr_t>(&Node.Value) % alignof(decltype(Node.Value)), 0u);
+		EXPECT_EQ(List.At(Count), &Node);
+		++Count;
+	}
+	EXPECT_EQ(Count, List.GetSize());
+}
+
+TEST(SkipList, OverAlignedKeys)
+{
+	using Key = FAlignedSkipListItem<64>;
+	TK::TSkipList<Key, int> List;
+	for (int i = 0; i < 64; ++i)
+		List.Insert(Key(i), i);
+	VerifyAlignedSkipListNodes(List);
+	auto Copy = List;
+	VerifyAlignedSkipListNodes(Copy);
+	ASSERT_NE(List.Update(Key(32), 32, -1), nullptr);
+	VerifyAlignedSkipListNodes(List);
+	EXPECT_TRUE(List.Erase(Key(32), -1));
+	List.Clear();
+	EXPECT_TRUE(List.IsEmpty());
+}
+
+TEST(SkipList, OverAlignedValues)
+{
+	using Value = FAlignedSkipListItem<128>;
+	TK::TSkipList<int, Value> List;
+	for (int i = 0; i < 64; ++i)
+		List.Insert(i, Value(i));
+	VerifyAlignedSkipListNodes(List);
+	auto Copy = List;
+	VerifyAlignedSkipListNodes(Copy);
+	ASSERT_NE(List.Update(32, Value(32), Value(-1)), nullptr);
+	VerifyAlignedSkipListNodes(List);
+	EXPECT_TRUE(List.Erase(32, Value(-1)));
+	List.Clear();
+	EXPECT_TRUE(List.IsEmpty());
+}
+
+TEST(SkipList, OverAlignedNodeLinks)
+{
+	using NodeType = TK::TSkipNode<FAlignedSkipListItem<64>, FAlignedSkipListItem<128>>;
+	for (int Levels : {1, 8, 32})
+	{
+		auto* Node = NodeType::Create(FAlignedSkipListItem<64>(1), FAlignedSkipListItem<128>(2), Levels);
+		EXPECT_EQ(reinterpret_cast<std::uintptr_t>(Node) % alignof(NodeType), 0u);
+		for (int Level = 0; Level < Levels; ++Level)
+		{
+			EXPECT_EQ(Node->GetLink(Level)->Next, nullptr);
+			EXPECT_EQ(Node->GetLink(Level)->Span, 0);
+		}
+		NodeType::Free(Node);
+	}
+}
 
 // Deterministic random func: always returns false => all nodes have level 1
 struct FAlwaysFalse { bool operator()() const { return false; } };
@@ -2372,6 +2493,93 @@ TEST(SkipList, GetCountInRange_EmptyList)
 	IntSkipList List;
 	TK::TRange<int> Range = {{10, false}, {20, false}};
 	EXPECT_EQ(List.GetCountInRange(Range), 0);
+}
+
+TEST(SkipList, GetCountInRange_ReversedBounds)
+{
+	IntSkipList List;
+	for (int i = 1; i <= 4; ++i)
+		List.Insert(i, i * 10);
+
+	for (int Mask = 0; Mask < 4; ++Mask)
+	{
+		TK::TRange<int> Range = {{40, (Mask & 1) != 0}, {10, (Mask & 2) != 0}};
+		EXPECT_EQ(List.GetCountInRange(Range), 0) << "mask=" << Mask;
+		EXPECT_FALSE(List.ContainsAnyInRange(Range));
+	}
+}
+
+TEST(SkipList, GetCountInRange_EqualBoundsWithDuplicateValues)
+{
+	IntSkipList List;
+	List.Insert(1, 10);
+	List.Insert(2, 20);
+	List.Insert(3, 20);
+	List.Insert(4, 30);
+
+	for (int Mask = 0; Mask < 4; ++Mask)
+	{
+		TK::TRange<int> Range = {{20, (Mask & 1) != 0}, {20, (Mask & 2) != 0}};
+		EXPECT_EQ(List.GetCountInRange(Range), Mask == 0 ? 2 : 0) << "mask=" << Mask;
+		EXPECT_EQ(List.ContainsAnyInRange(Range), Mask == 0) << "mask=" << Mask;
+	}
+}
+
+// Check all bound combinations against a direct scan, including gaps,
+// bounds outside the list, reversed bounds, and an empty list.
+template <typename ListType, typename LessType>
+void VerifyRangeCountsAgainstScan(LessType Less)
+{
+	ListType List;
+	const int Bounds[] = {0, 10, 15, 20, 25, 30, 40};
+	for (int Pass = 0; Pass < 2; ++Pass)
+	{
+		if (Pass == 1)
+		{
+			List.Insert(1, 10);
+			List.Insert(2, 20);
+			List.Insert(3, 20);
+			List.Insert(4, 30);
+		}
+		for (int Lower : Bounds)
+		{
+			for (int Upper : Bounds)
+			{
+				for (int Mask = 0; Mask < 4; ++Mask)
+				{
+					const bool LowerOpen = (Mask & 1) != 0;
+					const bool UpperOpen = (Mask & 2) != 0;
+					TK::TRange<int> Range = {{Lower, LowerOpen}, {Upper, UpperOpen}};
+					int Expected = 0;
+					for (const auto& Node : List)
+					{
+						const bool AboveLower = LowerOpen ? Less(Lower, Node.Value) : !Less(Node.Value, Lower);
+						const bool BelowUpper = UpperOpen ? Less(Node.Value, Upper) : !Less(Upper, Node.Value);
+						if (AboveLower && BelowUpper)
+							++Expected;
+					}
+					EXPECT_EQ(List.GetCountInRange(Range), Expected)
+						<< "pass=" << Pass << " lower=" << Lower << " upper=" << Upper << " mask=" << Mask;
+					EXPECT_EQ(List.ContainsAnyInRange(Range), Expected > 0);
+				}
+			}
+		}
+	}
+}
+
+TEST(SkipListFlat, GetCountInRange_AllBoundCombinations)
+{
+	VerifyRangeCountsAgainstScan<FlatSkipList>(std::less<int>{});
+}
+
+TEST(SkipListTall, GetCountInRange_AllBoundCombinations)
+{
+	VerifyRangeCountsAgainstScan<TallSkipList>(std::less<int>{});
+}
+
+TEST(SkipList, GetCountInRange_DescendingAllBoundCombinations)
+{
+	VerifyRangeCountsAgainstScan<DescSkipList>(std::greater<int>{});
 }
 
 TEST(SkipList, GetCountInRange_NoElementsInRange)

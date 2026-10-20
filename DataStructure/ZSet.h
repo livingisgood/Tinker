@@ -99,13 +99,13 @@ namespace TK
 		const NodeType* GetFirst() const { return SortedVList.GetFirst(); }
 		const NodeType* GetLast() const { return SortedVList.GetLast(); }
 
-		FIterator begin()  const { return FIterator(GetFirst()); }
-		FIterator end()    const { return FIterator(nullptr); }
+		FIterator begin()  const { return SortedVList.begin(); }
+		FIterator end()    const { return SortedVList.end(); }
 		FIterator cbegin() const { return begin(); }
 		FIterator cend()   const { return end(); }
 
-		FReverseIterator rbegin()  const { return FReverseIterator(GetLast()); }
-		FReverseIterator rend()    const { return FReverseIterator(nullptr); }
+		FReverseIterator rbegin()  const { return SortedVList.rbegin(); }
+		FReverseIterator rend()    const { return SortedVList.rend(); }
 		FReverseIterator crbegin() const { return rbegin(); }
 		FReverseIterator crend()   const { return rend(); }
 

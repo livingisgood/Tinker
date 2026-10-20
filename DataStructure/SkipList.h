@@ -3,6 +3,8 @@
 #include <random>
 #include <utility>
 #include <cstddef>
+#include <cstdlib>
+#include <new>
 
 #include "TinkerAssert.h"
 
@@ -89,8 +91,15 @@ namespace TK
 		template <typename KeyT, typename ValueT>
 		static TSkipNode* Create(KeyT&& InKey, ValueT&& InValue, int Levels)
 		{
-			void* Memory = std::malloc(sizeof(TSkipNode) + (Levels - 1) * sizeof(FLink));
-			TSkipNode* Node = new(Memory)TSkipNode(std::forward<KeyT>(InKey), std::forward<ValueT>(InValue));
+			void* Memory = ::operator new(
+				sizeof(TSkipNode) + (Levels - 1) * sizeof(FLink),
+				std::align_val_t{alignof(TSkipNode)}, std::nothrow);
+			if (!Memory)
+			{
+				TK_ASSERT(false);
+				std::abort();
+			}
+			TSkipNode* Node = ::new(Memory)TSkipNode(std::forward<KeyT>(InKey), std::forward<ValueT>(InValue));
 
 			for (int i = 0; i < Levels; ++i)
 			{
@@ -105,7 +114,7 @@ namespace TK
 		static void Free(TSkipNode* Node)
 		{
 			Node->~TSkipNode();
-			std::free(Node);
+			::operator delete(Node, std::align_val_t{alignof(TSkipNode)});
 		}
 	};
 
@@ -126,6 +135,7 @@ namespace TK
 		using NodeLink = typename TSkipNode<K, V>::FLink;
 		using SizeType = typename TSkipNode<K, V>::SizeType;
 
+		// Iterators must be reacquired after swapping or moving the list.
 		class FIterator
 		{
 		public:
@@ -136,7 +146,7 @@ namespace TK
 			using reference = const NodeType&;
 
 			FIterator() = default;
-			explicit FIterator(pointer InNode) : Node(InNode) {}
+			FIterator(pointer InNode, const TSkipList* InList) : Node(InNode), List(InList) {}
 
 			reference operator*() const { return *Node; }
 			pointer   operator->() const { return Node; }
@@ -144,14 +154,20 @@ namespace TK
 			FIterator& operator++() { Node = Node->GetNext(); return *this; }
 			FIterator  operator++(int) { auto Tmp = *this; Node = Node->GetNext(); return Tmp; }
 
-			FIterator& operator--() { Node = Node->GetPrev(); return *this; }
-			FIterator  operator--(int) { auto Tmp = *this; Node = Node->GetPrev(); return Tmp; }
+			FIterator& operator--()
+			{
+				TK_ASSERT(Node || (List && !List->IsEmpty()));
+				Node = Node ? Node->GetPrev() : List->GetLast();
+				return *this;
+			}
+			FIterator  operator--(int) { auto Tmp = *this; --*this; return Tmp; }
 
 			bool operator==(const FIterator& Rhs) const { return Node == Rhs.Node; }
 			bool operator!=(const FIterator& Rhs) const { return Node != Rhs.Node; }
 
 		private:
 			pointer Node {nullptr};
+			const TSkipList* List {nullptr};
 		};
 
 		class FReverseIterator
@@ -164,7 +180,7 @@ namespace TK
 			using reference = const NodeType&;
 
 			FReverseIterator() = default;
-			explicit FReverseIterator(pointer InNode) : Node(InNode) {}
+			FReverseIterator(pointer InNode, const TSkipList* InList) : Node(InNode), List(InList) {}
 
 			reference operator*() const { return *Node; }
 			pointer   operator->() const { return Node; }
@@ -172,14 +188,20 @@ namespace TK
 			FReverseIterator& operator++() { Node = Node->GetPrev(); return *this; }
 			FReverseIterator  operator++(int) { auto Tmp = *this; Node = Node->GetPrev(); return Tmp; }
 
-			FReverseIterator& operator--() { Node = Node->GetNext(); return *this; }
-			FReverseIterator  operator--(int) { auto Tmp = *this; Node = Node->GetNext(); return Tmp; }
+			FReverseIterator& operator--()
+			{
+				TK_ASSERT(Node || (List && !List->IsEmpty()));
+				Node = Node ? Node->GetNext() : List->GetFirst();
+				return *this;
+			}
+			FReverseIterator  operator--(int) { auto Tmp = *this; --*this; return Tmp; }
 
 			bool operator==(const FReverseIterator& Rhs) const { return Node == Rhs.Node; }
 			bool operator!=(const FReverseIterator& Rhs) const { return Node != Rhs.Node; }
 
 		private:
 			pointer Node {nullptr};
+			const TSkipList* List {nullptr};
 		};
 
 		struct FDefaultEraseHandler
@@ -350,19 +372,25 @@ namespace TK
 		
 		const NodeType* GetLast() const { return Tail; }
 		
+		bool IsValidRange(const TRange<V>& Range) const
+		{
+			auto Order = ValueComparer(Range.LowerBound.Value, Range.UpperBound.Value);
+			if (Order > 0)
+				return false;
+
+			if (Order == 0 && (Range.LowerBound.bExclusive || Range.UpperBound.bExclusive))
+				return false;
+			
+			return true;
+		}
+		
 		bool ContainsAnyInRange(const TRange<V>& Range) const
 		{
 			if (IsEmpty())
 				return false;
-
-			{
-				auto Order = ValueComparer(Range.LowerBound.Value, Range.UpperBound.Value);
-				if (Order > 0)
-					return false;
-
-				if (Order == 0 && (Range.LowerBound.bExclusive || Range.UpperBound.bExclusive))
-					return false;
-			}
+			
+			if (!IsValidRange(Range))
+				return false;
 
 			if (OutOfUpperBound(Head->GetLink(0)->Next->Value, Range.UpperBound))
 				return false;
@@ -382,6 +410,9 @@ namespace TK
 
 		SizeType GetCountInRange(const TRange<V>& Range) const
 		{
+			if (!IsValidRange(Range))
+				return 0;
+			
 			auto FirstInRange = GetFirstInLowerBound(Range.LowerBound);
 			if (FirstInRange.first == nullptr)
 				return 0;
@@ -613,13 +644,13 @@ namespace TK
 			return Node? Index : -1;
 		}
 		
-		FIterator begin()  const { return FIterator(GetFirst()); }
-		FIterator end()    const { return FIterator(nullptr); }
+		FIterator begin()  const { return FIterator(GetFirst(), this); }
+		FIterator end()    const { return FIterator(nullptr, this); }
 		FIterator cbegin() const { return begin(); }
 		FIterator cend()   const { return end(); }
 
-		FReverseIterator rbegin()  const { return FReverseIterator(GetLast()); }
-		FReverseIterator rend()    const { return FReverseIterator(nullptr); }
+		FReverseIterator rbegin()  const { return FReverseIterator(GetLast(), this); }
+		FReverseIterator rend()    const { return FReverseIterator(nullptr, this); }
 		FReverseIterator crbegin() const { return rbegin(); }
 		FReverseIterator crend()   const { return rend(); }
 		
@@ -638,21 +669,21 @@ namespace TK
 			FIterator begin() const
 			{
 				if (IsEmptyRange())
-					return FIterator(nullptr);
+					return FIterator(nullptr, List);
 				auto [Node, _] = List->GetFirstInLowerBound(Range.LowerBound);
 				if (Node && List->OutOfUpperBound(Node->Value, Range.UpperBound))
 					return end(); // no element satisfies both bounds: begin == end, range-for is a no-op
-				return FIterator(Node); // Node==nullptr => end() is nullptr too, naturally equal
+				return FIterator(Node, List); // Node==nullptr => end() is nullptr too, naturally equal
 			}
 
 			FIterator end() const
 			{
 				if (IsEmptyRange())
-					return FIterator(nullptr);
+					return FIterator(nullptr, List);
 				// first node beyond the upper bound == lower_bound(upper, flipped exclusivity)
 				auto [Node, _] = List->GetFirstInLowerBound(
 					{ Range.UpperBound.Value, !Range.UpperBound.bExclusive });
-				return FIterator(Node);
+				return FIterator(Node, List);
 			}
 
 		private:
@@ -675,19 +706,19 @@ namespace TK
 			FIterator begin() const
 			{
 				if (IsEmptyRange())
-					return FIterator(nullptr);
+					return FIterator(nullptr, List);
 				// clamp negative FromRank to 0 (the rest of the range is still
 				// valid), mirroring EraseByRank's clamping.
-				return FIterator(List->At(FromRank < 0 ? 0 : FromRank));
+				return FIterator(List->At(FromRank < 0 ? 0 : FromRank), List);
 			}
 
 			FIterator end() const
 			{
 				if (IsEmptyRange())
-					return FIterator(nullptr);
+					return FIterator(nullptr, List);
 				if (ToRank >= List->GetSize() - 1)
-					return FIterator(nullptr);
-				return FIterator(List->At(ToRank + 1));
+					return FIterator(nullptr, List);
+				return FIterator(List->At(ToRank + 1), List);
 			}
 
 		private:
@@ -784,7 +815,7 @@ namespace TK
 			if (Location.Node == nullptr)
 				return false;
 
-			Erase(Location);
+			NodeType::Free(Unlink(Location));
 			return true;
 		}
 
@@ -886,7 +917,7 @@ namespace TK
 				NodeType* Next = Location.Node->GetLink(0)->Next;
 				if (Next == nullptr || Comparer(Next, Key, NewValue) > 0)
 				{
-					Location.Node->Value = NewValue;
+					Location.Node->Value = std::forward<ValueT>(NewValue);
 					return Location.Node;
 				}
 			}
@@ -895,13 +926,16 @@ namespace TK
 				NodeType* Prev = Location.Node->Prev;
 				if (Prev == nullptr || Comparer(Prev, Key, NewValue) < 0)
 				{
-					Location.Node->Value = NewValue;
+					Location.Node->Value = std::forward<ValueT>(NewValue);
 					return Location.Node;
 				}
 			}
 
-			Erase(Location);
-			return Insert(Key, std::forward<ValueT>(NewValue)).first;
+			NodeType* Old = Unlink(Location);
+			const NodeType* New = Insert(Key, std::forward<ValueT>(NewValue)).first;
+			
+			NodeType::Free(Old);
+			return New;
 		}
 	
 	private:
@@ -967,10 +1001,10 @@ namespace TK
 			return Location;
 		}
 
-		void Erase(const FLocation& Location)
+		NodeType* Unlink(const FLocation& Location)
 		{
 			if (Location.Node == nullptr)
-				return;
+				return nullptr;
 
 			for (int i = 0; i < ListLevels; ++i)
 			{
@@ -1021,7 +1055,7 @@ namespace TK
 
 			--Size;
 
-			NodeType::Free(Location.Node);
+			return Location.Node;
 		}
 
 		bool OutOfLowerBound(const V& Value, const TRangeBound<V>& Bound) const
